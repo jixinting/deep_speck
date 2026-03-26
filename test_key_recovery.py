@@ -157,6 +157,12 @@ def wrong_key_decryption(n, diff=(0x0040,0x0), nr=7, net = net7):
 tmp_br = np.arange(2**14, dtype=np.uint16);
 tmp_br = np.repeat(tmp_br, 32).reshape(-1,32);
 
+def huber_loss(x, delta=1.0):
+  abs_x = np.abs(x);
+  quadratic = np.minimum(abs_x, delta);
+  linear = abs_x - quadratic;
+  return(0.5 * quadratic**2 + delta * linear);
+
 def bayesian_rank_kr(cand, emp_mean, m=m7, s=s7):
   global tmp_br;
   n = len(cand);
@@ -166,7 +172,7 @@ def bayesian_rank_kr(cand, emp_mean, m=m7, s=s7):
   tmp = tmp_br ^ cand;
   v = (emp_mean - m[tmp]) * s[tmp];
   v = v.reshape(-1, n);
-  scores = np.linalg.norm(v, axis=1);
+  scores = np.sum(huber_loss(v), axis=1);
   return(scores);
 
 def bayesian_key_recovery(cts, net=net7, m = m7, s = s7, num_cand = 32, num_iter=5, seed = None):
