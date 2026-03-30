@@ -2,6 +2,15 @@ import os, sys
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['TF_USE_LEGACY_KERAS'] = '1'
 
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    tf.config.set_visible_devices(gpus[0], 'GPU')
+    tf.config.experimental.set_memory_growth(gpus[0], True)
+    print(f"Using GPU: {gpus[0].name}")
+else:
+    print("WARNING: No GPU found, running on CPU")
+
 import tf_keras
 sys.modules['keras'] = tf_keras
 sys.modules['keras.models'] = tf_keras.models
