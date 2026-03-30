@@ -11,7 +11,15 @@ if gpus:
 else:
     print("WARNING: No GPU found, running on CPU")
 
+# Force tf-keras to use GPU
 import tf_keras
+tf_keras.backend.set_session(tf.compat.v1.Session(
+    config=tf.compat.v1.ConfigProto(
+        allow_soft_placement=True,
+        log_device_placement=True,
+        gpu_options=tf.compat.v1.GPUOptions(allow_growth=True)
+    )
+))
 sys.modules['keras'] = tf_keras
 sys.modules['keras.models'] = tf_keras.models
 sys.modules['keras.callbacks'] = tf_keras.callbacks
