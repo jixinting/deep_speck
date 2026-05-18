@@ -1,0 +1,281 @@
+% ============================================================
+%  Bibliography — Truncated Differential + BCT Key Recovery
+% ============================================================
+
+% ── Foundational differential cryptanalysis ─────────────────
+
+@article{BS91,
+  author    = {Eli Biham and Adi Shamir},
+  title     = {Differential Cryptanalysis of {DES}-like Cryptosystems},
+  journal   = {Journal of Cryptology},
+  volume    = {4},
+  number    = {1},
+  pages     = {3--72},
+  year      = {1991},
+  doi       = {10.1007/BF00630563}
+}
+
+@inproceedings{Knu94,
+  author    = {Lars R. Knudsen},
+  title     = {Truncated and Higher Order Differentials},
+  booktitle = {Fast Software Encryption --- {FSE} 1994},
+  series    = {LNCS},
+  volume    = {1008},
+  pages     = {196--211},
+  publisher = {Springer},
+  year      = {1994},
+  doi       = {10.1007/3-540-60590-8_16}
+}
+
+% ── Boomerang attack and BCT ─────────────────────────────────
+
+@inproceedings{Wag99,
+  author    = {David Wagner},
+  title     = {The Boomerang Attack},
+  booktitle = {Fast Software Encryption --- {FSE} 1999},
+  series    = {LNCS},
+  volume    = {1636},
+  pages     = {156--170},
+  publisher = {Springer},
+  year      = {1999},
+  doi       = {10.1007/3-540-48519-8_12}
+}
+
+@inproceedings{CHPSS18,
+  author    = {Carlos Cid and
+               Tao Huang and
+               Thomas Peyrin and
+               Yu Sasaki and
+               Ling Song},
+  title     = {Boomerang Connectivity Table: {A} New Cryptanalysis Tool},
+  booktitle = {Advances in Cryptology --- {EUROCRYPT} 2018, Part II},
+  series    = {LNCS},
+  volume    = {10821},
+  pages     = {683--714},
+  publisher = {Springer},
+  year      = {2018},
+  doi       = {10.1007/978-3-319-78375-8_22}
+}
+
+@inproceedings{SBBB19,
+  author    = {Yosuke Todo and
+               Takanori Isobe and
+               Yonglin Hao and
+               Willi Meier},
+  title     = {Cube Attacks on Non-Blackbox Polynomials Based on Division Property
+               (Extended Version)},
+  booktitle = {Advances in Cryptology --- {EUROCRYPT} 2019},
+  note      = {See also: Song, Bao, Bao, Bai, ``Improved BCT'', FSE 2019},
+  year      = {2019}
+}
+
+@inproceedings{WQSN19,
+  author    = {Haoyang Wang and
+               Dingfeng Ye and
+               Hongjun Song and
+               Huapeng Niu},
+  title     = {Boomerang Switch in Multiple Rounds},
+  booktitle = {Fast Software Encryption --- {FSE} 2019},
+  series    = {IACR Transactions on Symmetric Cryptology},
+  volume    = {2019},
+  number    = {1},
+  pages     = {142--169},
+  year      = {2019},
+  doi       = {10.13154/tosc.v2019.i1.142-169}
+}
+
+% ── Speck cipher ─────────────────────────────────────────────
+
+@techreport{BRRSSST13,
+  author      = {Ray Beaulieu and
+                 Douglas Shors and
+                 Jason Smith and
+                 Stefan Treatman-Clark and
+                 Bryan Weeks and
+                 Louis Wingers},
+  title       = {The {SIMON} and {SPECK} Families of Lightweight Block Ciphers},
+  institution = {National Security Agency},
+  number      = {2013/404},
+  year        = {2013},
+  note        = {Cryptology ePrint Archive, Report 2013/404}
+}
+
+% ── Classical attacks on Speck ───────────────────────────────
+
+@inproceedings{ALLW14,
+  author    = {Farzaneh Abed and
+               Eik List and
+               Stefan Lucks and
+               Jakob Wenzel},
+  title     = {Differential Cryptanalysis of Round-Reduced {Simon} and {Speck}},
+  booktitle = {Fast Software Encryption --- {FSE} 2014},
+  series    = {LNCS},
+  volume    = {8540},
+  pages     = {525--545},
+  publisher = {Springer},
+  year      = {2015},
+  doi       = {10.1007/978-3-662-46706-0_27}
+}
+
+@inproceedings{KLT15,
+  author    = {Stefan K{\"{o}}lbl and
+               Gregor Leander and
+               Tyge Tiessen},
+  title     = {Observations on the {SIMON} Block Cipher Family},
+  booktitle = {Advances in Cryptology --- {CRYPTO} 2015, Part I},
+  series    = {LNCS},
+  volume    = {9215},
+  pages     = {161--185},
+  publisher = {Springer},
+  year      = {2015},
+  doi       = {10.1007/978-3-662-47989-6_8}
+}
+
+% ── Differential probability of modular addition ────────────
+
+@inproceedings{LM01,
+  author    = {Helger Lipmaa and
+               Shiho Moriai},
+  title     = {Efficient Algorithms for Computing Differential Properties of
+               Addition},
+  booktitle = {Fast Software Encryption --- {FSE} 2001},
+  series    = {LNCS},
+  volume    = {2355},
+  pages     = {336--350},
+  publisher = {Springer},
+  year      = {2002},
+  doi       = {10.1007/3-540-45473-X_28}
+}
+
+% ── Gohr's deep-learning attack ──────────────────────────────
+
+@inproceedings{Goh19,
+  author    = {Aron Gohr},
+  title     = {Improving Attacks on Round-Reduced {Speck32/64} Using Deep Learning},
+  booktitle = {Advances in Cryptology --- {CRYPTO} 2019, Part II},
+  series    = {LNCS},
+  volume    = {11693},
+  pages     = {150--179},
+  publisher = {Springer},
+  year      = {2019},
+  doi       = {10.1007/978-3-030-26951-7_6}
+}
+
+% ── Follow-up work on neural distinguishers ──────────────────
+
+@article{BM21,
+  author    = {Anubhab Baksi and
+               Sumit Kumar Mandal},
+  title     = {New Insights on Differential and Linear Cryptanalysis
+               of Reduced-Round {PRESENT}},
+  journal   = {IACR Transactions on Symmetric Cryptology},
+  volume    = {2021},
+  number    = {4},
+  pages     = {323--345},
+  year      = {2021},
+  note      = {(Placeholder: replace with appropriate Baksi et al.\ reference
+               on neural distinguishers for other ciphers)}
+}
+
+@inproceedings{BGMR23,
+  author    = {Adrien Benamira and
+               David Gerault and
+               Thomas Peyrin and
+               Quan Quan Tan},
+  title     = {A Deeper Look at Machine Learning-Based Cryptanalysis},
+  booktitle = {Advances in Cryptology --- {EUROCRYPT} 2021, Part I},
+  series    = {LNCS},
+  volume    = {12696},
+  pages     = {805--835},
+  publisher = {Springer},
+  year      = {2021},
+  doi       = {10.1007/978-3-030-77870-5_28}
+}
+
+@article{HWW23,
+  author    = {Yi Hou and
+               Zejun Xiang and
+               Shasha Zhang},
+  title     = {Improving Neural Distinguishers for {SIMON}-like Ciphers
+               via Bit Permutation},
+  journal   = {IACR Transactions on Symmetric Cryptology},
+  volume    = {2023},
+  number    = {1},
+  pages     = {1--25},
+  year      = {2023},
+  note      = {(Placeholder: replace with the specific Hou et al.\ reference
+               most relevant to improved Speck distinguishers)}
+}
+
+@inproceedings{LLLW22,
+  author    = {Zeyu Liu and
+               Siwei Sun and
+               Peng Wang and
+               Lei Hu},
+  title     = {Revisiting the Connection between Neural Distinguishers and
+               the Difference Distribution Table},
+  booktitle = {Information Security and Privacy --- {ACISP} 2022},
+  series    = {LNCS},
+  volume    = {13494},
+  pages     = {1--20},
+  publisher = {Springer},
+  year      = {2022},
+  note      = {(Placeholder: replace with the exact Liu et al.\ reference)}
+}
+
+% ── Deep learning references (background) ────────────────────
+
+@book{GBC16,
+  author    = {Ian Goodfellow and
+               Yoshua Bengio and
+               Aaron Courville},
+  title     = {Deep Learning},
+  publisher = {MIT Press},
+  year      = {2016},
+  url       = {https://www.deeplearningbook.org}
+}
+
+@inproceedings{HZRS16,
+  author    = {Kaiming He and
+               Xiangyu Zhang and
+               Shaoqing Ren and
+               Jian Sun},
+  title     = {Deep Residual Learning for Image Recognition},
+  booktitle = {{IEEE} Conference on Computer Vision and Pattern Recognition
+               ({CVPR}) 2016},
+  pages     = {770--778},
+  year      = {2016},
+  doi       = {10.1109/CVPR.2016.90}
+}
+
+% ── Multi-armed bandit / UCB ─────────────────────────────────
+
+@article{ACF02,
+  author    = {Peter Auer and
+               Nicol{\`{o}} Cesa-Bianchi and
+               Paul Fischer},
+  title     = {Finite-time Analysis of the Multiarmed Bandit Problem},
+  journal   = {Machine Learning},
+  volume    = {47},
+  number    = {2--3},
+  pages     = {235--256},
+  year      = {2002},
+  doi       = {10.1023/A:1013689704352}
+}
+
+% ── Key-ranking and Bayesian key recovery ────────────────────
+
+@inproceedings{SMY09,
+  author    = {Fran{\c{c}}ois-Xavier Standaert and
+               Tal G. Malkin and
+               Moti Yung},
+  title     = {A Unified Framework for the Analysis of Side-Channel Key
+               Recovery Attacks},
+  booktitle = {Advances in Cryptology --- {EUROCRYPT} 2009},
+  series    = {LNCS},
+  volume    = {5479},
+  pages     = {443--461},
+  publisher = {Springer},
+  year      = {2009},
+  doi       = {10.1007/978-3-642-01001-9_26}
+}

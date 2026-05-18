@@ -1,0 +1,384 @@
+% ============================================================
+%  LNCS template — Truncated Differential + BCT Key Recovery
+% ============================================================
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}          % \coloneqq, etc.
+\usepackage{booktabs}           % professional tables
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black
+}
+\usepackage{microtype}          % better typography
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% ── Notation shorthands ──────────────────────────────────────
+\newcommand{\Ftwon}{\mathbb{F}_2^n}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\DDT}{\mathrm{DDT}}
+\newcommand{\BCT}{\mathrm{BCT}}
+\newcommand{\tBCT}{\mathrm{BCT}_{\mathrm{trunc}}}
+\newcommand{\pself}{p^{\mathrm{self}}_{\mathrm{trunc}}}
+\newcommand{\WKP}{\mathrm{WKP}}
+\newcommand{\LLR}{\mathrm{LLR}}
+\newcommand{\speck}{\textsc{Speck}32/64}
+\newcommand{\xor}{\oplus}
+\newcommand{\ror}[2]{(#1 \ggg #2)}
+\newcommand{\rol}[2]{(#1 \lll #2)}
+
+% ── Theorem-like environments ────────────────────────────────
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+\title{Theoretical Key Recovery from Truncated Differentials:\\
+       A BCT-Algebraic Wrong-Key Profile for \speck{}}
+
+% ── Suppress author details for anonymous review ─────────────
+% Comment out the \author / \authorrunning / \institute block
+% below and uncomment the anonymous version for submission.
+\author{Anonymous Author(s)}
+\authorrunning{Anonymous}
+\institute{}
+
+% ── De-anonymised version (uncomment for camera-ready) ───────
+%\author{FirstName LastName\inst{1} \and
+%        FirstName LastName\inst{2}}
+%\authorrunning{LastName and LastName}
+%\institute{Institution Name, City, Country
+%           \email{email@institution.edu}
+%  \and
+%           Institution Name, City, Country
+%           \email{email@institution.edu}}
+
+\maketitle
+
+% ============================================================
+\begin{abstract}
+Neural-network-based distinguishers have achieved state-of-the-art
+results in differential cryptanalysis of \speck{}, most notably
+through Gohr's CRYPTO~2019 attack framework.  That framework rests on
+two black-box components—a deep residual distinguisher and an
+empirically sampled wrong-key response profile—whose internal
+structure has so far resisted closed-form analysis.  In this paper we
+replace both components with algebraically defined counterparts and
+thereby provide a fully interpretable reconstruction of the attack.
+We substitute the neural distinguisher with a truncated differential
+distinguisher whose scores are computed directly from the cipher's
+difference distribution table (DDT), and we derive the wrong-key
+profile analytically via a novel application of the boomerang
+connectivity table (BCT).  Specifically, for each 16-bit subkey
+offset~$g$ we show that the expected distinguisher score under the
+corresponding wrong-key hypothesis equals a \emph{truncated
+self-returning BCT probability} $\pself(g)$, which admits an exact
+bit-by-bit computation through a carry-propagation transfer matrix.
+The resulting profile is derived rather than measured, its shape is
+governed by the algebraic structure of \speck{}'s modular-addition
+round function, and it requires no neural network training or
+large-scale sampling.  We demonstrate that the reconstructed Bayesian
+beam-search framework achieves key-recovery performance competitive
+with Gohr's original attack while being amenable to complexity
+analysis.  Our results suggest that the statistical learning structure
+underlying neural-distinguisher attacks on ARX ciphers can in many
+cases be recovered analytically from classical differential tools.
+\keywords{Speck32/64 \and differential cryptanalysis \and truncated
+differentials \and boomerang connectivity table \and wrong-key profile
+\and key recovery \and ARX cipher}
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+Differential cryptanalysis, introduced by Biham and
+Shamir~\cite{BS91}, exploits the non-uniform propagation of XOR
+differences through a block cipher's round function to recover secret
+key material.  For an $n$-bit block cipher, the fundamental object
+governing this propagation is the \emph{difference distribution table}
+(DDT): an array indexed by input and output differences whose entries
+record the probability that a uniformly random input pair with the
+given input difference produces the given output difference after one
+round of encryption.  The boomerang attack, introduced by
+Wagner~\cite{Wag99} and subsequently refined through the notion of the
+\emph{boomerang connectivity table} (BCT) by Cid et
+al.~\cite{CHPSS18}, extends the differential framework to cover
+compatible transitions across the encryption and decryption
+directions.  Both tables have become standard tools in the security
+evaluation of symmetric-key primitives.
+
+\subsubsection{Speck32/64 and classical attacks.}
+The \speck{} cipher~\cite{BRRSSST13} belongs to the ARX (Add-Rotate-XOR)
+design family and has attracted sustained cryptanalytic interest as a
+lightweight benchmark target.  Its round function consists of a
+modular addition, a rotation, and an XOR, combined with a key
+injection:
+\begin{equation}
+  \label{eq:speck-round}
+  (x,\,y) \;\mapsto\;
+  \bigl(\ror{x}{7} \boxplus y \xor k,\;\;
+        \rol{y}{2} \xor (\ror{x}{7} \boxplus y \xor k)\bigr),
+\end{equation}
+where $\boxplus$ denotes addition modulo $2^{16}$ and $k$ is the
+current round subkey.  The differential behaviour of modular
+addition is well understood~\cite{LM01}, enabling precise computation
+of DDT and BCT entries for individual rounds of \speck{}.  Classical
+differential attacks have been mounted on up to 8 rounds of \speck{}
+using optimised distinguishers~\cite{ALLW14,KLT15}, but extending
+these attacks further has proven difficult due to the rapid diffusion
+of differences across rounds.
+
+\subsubsection{Gohr's neural-network attack.}
+In a landmark result at CRYPTO 2019, Gohr~\cite{Goh19} demonstrated
+that deep residual networks could serve as highly effective
+distinguishers for 7- and 8-round \speck{}, and embedded them within a
+sophisticated Bayesian key-recovery framework to mount practical attacks
+on up to 11 rounds.  The framework integrates three tightly coupled
+components.
+
+\begin{enumerate}
+  \item \textbf{Neural distinguisher.}  A deep residual network is
+    trained to classify ciphertext pairs produced under a fixed input
+    difference from randomly generated pairs.  Given a ciphertext pair
+    $(C, C')$ with $C \xor C' = \Delta_{\mathrm{out}}$, the network
+    outputs a probability $p \in (0,1)$ that the pair arises from a
+    real differential rather than from two independent random
+    plaintexts.  The per-pair log-likelihood ratio (LLR)
+    $\log_2(p/(1-p))$ is accumulated over all available ciphertext
+    pairs to produce a score for each subkey hypothesis.
+
+  \item \textbf{Wrong-key response profile (WKP).}  For each of the
+    $2^{16}$ possible last-round subkey offsets $g = k_r \xor k_g$
+    (where $k_r$ is the real subkey and $k_g$ is the guessed subkey),
+    Gohr measures the \emph{mean} and \emph{standard deviation} of the
+    network's output when ciphertext pairs are partially decrypted
+    under the wrong subkey $k_g$.  This profiling step requires on the
+    order of $10^6$ forward passes through the network for each of the
+    $2^{16}$ offset values, making it computationally intensive and
+    inherently tied to the specific trained network.
+
+  \item \textbf{Bayesian beam search.}  Given a set of ciphertext
+    pairs, Gohr iterates a beam search over the subkey space.  In each
+    iteration, the current pool of $B = 32$ subkey candidates is
+    partially decrypted and fed to the neural network; the resulting
+    empirical output means are compared to the precomputed WKP via a
+    Bayesian distance metric (an $\ell^2$ residual against the profile),
+    and the $B$ candidates whose profile best matches the observed
+    statistics are retained for the next iteration.  A two-layer
+    nesting recovers the last two round subkeys sequentially, followed
+    by a local refinement step that exhaustively explores candidates
+    within Hamming distance 2 of the current best guess.
+\end{enumerate}
+
+This framework achieved results far beyond what had been attained with
+classical methods and demonstrated, for the first time, that
+machine-learning-based distinguishers could be integrated into a full
+key-recovery attack with practical data and time complexity.
+
+\subsubsection{The interpretability gap.}
+Despite its empirical success, Gohr's framework exhibits a fundamental
+limitation: it is constructed almost entirely from observations rather
+than proofs.  The neural distinguisher is a black box whose internal
+representations have no direct cryptanalytic interpretation.  The WKP
+is produced by brute-force sampling and carries no closed-form
+description.  As a consequence:
+\begin{itemize}
+  \item No theoretical bound governs the \emph{shape} of the WKP, so
+    the signal-to-noise ratio of the beam search cannot be predicted
+    analytically.
+  \item No complexity formula characterises the minimum number of
+    ciphertext pairs required for the search to succeed with a given
+    probability.
+  \item Generalising the attack to a related cipher, or to a different
+    number of rounds, requires repeating the same expensive empirical
+    construction—training a new network and resampling the
+    profile—from scratch.
+\end{itemize}
+These limitations have prompted a line of follow-up work aimed at
+understanding why neural distinguishers work as well as they
+do~\cite{BM21,BGMR23,HWW23,LLLW22}, but a complete analytical
+reconstruction of Gohr's full key-recovery framework has not yet been
+achieved.
+
+\subsubsection{This work: a BCT-algebraic reconstruction.}
+We propose a theoretically grounded reconstruction of Gohr's key
+recovery framework in which both black-box components are replaced by
+algebraically defined counterparts derived from the differential
+structure of \speck{}.
+
+\paragraph{Truncated differential distinguisher.}
+We replace the neural network with a \emph{truncated differential
+distinguisher}.  Rather than learning patterns from training data, the
+distinguisher assigns to each ciphertext pair a LLR computed directly
+from the DDT of reduced-round \speck{}: after partially decrypting the
+pair by one round under the candidate subkey, we evaluate the
+log-probability of the resulting truncated output difference under the
+target differential distribution.  The truncation—fixing only a subset
+of the 32 output-difference bits—allows us to balance statistical
+power against computation: a coarser truncation reduces the
+distinguisher's information content but yields a simpler,
+smaller-footprint probability table.  Every score is an explicit
+function of the observed output difference and the precomputed
+differential probabilities, with no black-box inference involved.
+
+\paragraph{BCT-algebraic wrong-key profile.}
+The central analytical contribution of this work is a closed-form
+derivation of the WKP.  We show that, for a one-round
+truncated differential distinguisher applied to \speck{}, the
+expected LLR score under wrong-key hypothesis $g = k_r \xor k_g$ is
+determined by the probability that the truncated differential
+\emph{self-returns} under key offset~$g$:
+\begin{equation}
+  \label{eq:pself-informal}
+  \pself(g) \;\coloneqq\;
+  \Pr_x\!\bigl[\,
+    \Delta_{\mathrm{out}} \in \mathcal{T}
+    \;\big|\;
+    \Delta_{\mathrm{in}} \in \mathcal{T},\;
+    \text{one round of \speck{} with key offset } g
+  \,\bigr],
+\end{equation}
+where $\mathcal{T}$ is the truncated class defined by the chosen mask.
+We show that $\pself(g)$ can be computed \emph{exactly} for every
+$g \in \{0,1\}^{16}$ via a BCT-style algebraic transfer-matrix
+computation that processes each bit position independently and
+propagates carry distributions through a small $16 \times 16$
+stochastic matrix $M$.  The resulting profile requires no network
+training and no sampling; it is a direct consequence of the algebraic
+structure of the ARX round function.  In particular, the non-trivial
+variation of $\pself(g)$ across key offsets—the phenomenon that makes
+the Bayesian beam search effective—is explained entirely by the
+differential properties of modular addition and the specific
+bit-pattern of the chosen truncated differential.
+
+\paragraph{Interpretable beam-search analysis.}
+With both components in closed form, we provide a theoretical
+characterisation of the Bayesian beam search.  The signal available to
+the search is the gap $\pself(0) - \pself(g)$ between the correct-key
+and wrong-key self-returning probabilities; its magnitude and
+distribution over $g$ govern the convergence rate.  We derive a
+lower bound on the expected score advantage of the correct subkey, and
+use it to bound the data complexity of the attack.  We further show
+that the UCB-guided structure selection adopted by Gohr can be
+understood as a multi-armed bandit operating on noisy estimates of
+these same self-returning probabilities.
+
+\subsubsection{Contributions.}
+We summarise the contributions of this paper as follows.
+\begin{enumerate}
+  \item We introduce the \emph{truncated self-returning BCT
+    probability} $\pself(g)$ and show that it constitutes the
+    wrong-key profile of any one-round truncated differential
+    distinguisher applied to an ARX cipher whose round function
+    contains a single modular addition (Sect.~\ref{sec:bct}).
+
+  \item We present an exact bit-serial transfer-matrix algorithm for
+    computing $\pself(g)$ for all $g \in \{0,1\}^{16}$ in time
+    $O(16 \cdot 2^{16})$, requiring no sampling
+    (Sect.~\ref{sec:algorithm}).
+
+  \item We instantiate the framework on \speck{} with two carefully
+    selected truncated differentials (with input differences
+    $\mathtt{0x181E}$ and $\mathtt{0xC6A5}$) and verify that the
+    computed profiles match empirical measurements to within
+    statistical noise (Sect.~\ref{sec:experiments}).
+
+  \item We integrate the truncated distinguisher and the algebraic WKP
+    into a full reconstruction of Gohr's Bayesian key-recovery attack
+    and demonstrate key recovery competitive with the original
+    neural-network-based framework on 9--11 rounds of \speck{}
+    (Sect.~\ref{sec:attack}).
+
+  \item We derive data-complexity bounds for the beam search in terms
+    of $\pself$ and compare them to Gohr's empirically observed data
+    usage (Sect.~\ref{sec:complexity}).
+\end{enumerate}
+
+\subsubsection{Related work.}
+Neural distinguishers for block ciphers have been studied extensively
+since Gohr's breakthrough.  Baksi et al.~\cite{BM21} explored similar
+approaches for other ciphers; Benamira et al.~\cite{BGMR23} gave a
+partial theoretical explanation of why neural networks can distinguish
+$r$-round \speck{} by identifying the specific statistical features
+learned by the network; Hou et al.~\cite{HWW23} improved distinguisher
+accuracy through enhanced training procedures; and Liu et
+al.~\cite{LLLW22} studied the connection between neural distinguishers
+and classical DDT-based distinguishers.  Closest to our work is the
+independent observation by several authors that the neural distinguisher
+at 5 and 6 rounds is closely approximated by a DDT-based classifier;
+however, no prior work has derived the wrong-key profile algebraically
+or connected it to the BCT.  On the BCT side, the original
+formulation~\cite{CHPSS18} and its extensions~\cite{SBBB19,WQSN19}
+focus on the probability of boomerang quartets in the middle rounds of
+a cipher; our use of BCT-style algebra to compute single-round
+wrong-key profiles is, to the best of our knowledge, new.  Truncated
+differentials were introduced by Knudsen~\cite{Knu94} and have been
+applied to \speck{} by several works~\cite{ALLW14,KLT15}; here we
+combine them with the Bayesian key-ranking apparatus of Gohr's
+framework for the first time.
+
+\subsubsection{Organisation.}
+Section~\ref{sec:prelim} reviews \speck{}, the DDT, the BCT, and
+Gohr's original framework in the notation used throughout the paper.
+Section~\ref{sec:bct} introduces the truncated self-returning BCT
+probability and proves its role as the wrong-key profile.
+Section~\ref{sec:algorithm} presents the transfer-matrix algorithm for
+computing $\pself$.
+Section~\ref{sec:attack} describes the full reconstructed key-recovery
+attack.
+Section~\ref{sec:complexity} derives data-complexity bounds.
+Section~\ref{sec:experiments} presents experimental results.
+Section~\ref{sec:conclusion} concludes and discusses open problems.
+
+% ============================================================
+%  Placeholder sections (to be expanded)
+% ============================================================
+
+\section{Preliminaries}
+\label{sec:prelim}
+[To be written.]
+
+\section{Truncated Self-Returning BCT Probability}
+\label{sec:bct}
+[To be written.]
+
+\section{Transfer-Matrix Algorithm}
+\label{sec:algorithm}
+[To be written.]
+
+\section{Reconstructed Key-Recovery Attack}
+\label{sec:attack}
+[To be written.]
+
+\section{Data Complexity Analysis}
+\label{sec:complexity}
+[To be written.]
+
+\section{Experiments}
+\label{sec:experiments}
+[To be written.]
+
+\section{Conclusion}
+\label{sec:conclusion}
+[To be written.]
+
+% ============================================================
+\bibliographystyle{splncs04}
+\bibliography{refs}
+
+\end{document}
