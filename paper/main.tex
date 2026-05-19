@@ -662,7 +662,388 @@ identical to Gohr's original framework.
 
 \section{Truncated Self-Returning BCT Probability}
 \label{sec:bct}
-[To be written.]
+
+% ── 3.1 Wrong-key hit rate and the self-returning probability ─────────────────
+\subsection{Wrong-Key Hit Rate and the Self-Returning Probability}
+\label{subsec:pself-def}
+
+Recall the one-round decryption peel~\eqref{eq:peel}.  Under the correct
+subkey $k_{r-1}$, the peeled difference $\widetilde\Delta = F_{k_{r-1}}^{-1}(C)
+\xor F_{k_{r-1}}^{-1}(C')$ equals the output difference of the
+$(r{-}1)$-round cipher, and a truncated hit is observed with probability
+$p_t$.  Under a wrong subkey $k_g = k_{r-1} \xor g$ (with $g \ne 0$), the
+peeled difference is no longer governed by the cipher's $(r{-}1)$-round
+differential distribution, yet it is also not uniformly random: it is
+determined by the same ciphertext pair $( C, C')$ but decrypted with the
+wrong key, and therefore correlates with the true output difference through
+the cipher's algebraic structure.
+
+\begin{proposition}
+  \label{prop:wkp}
+  Let $(C, C')$ be a ciphertext pair produced by encrypting a plaintext
+  pair with XOR difference $\Delta_{\mathrm{in}}$ for $r$ rounds with key $k$.
+  Define the peeled difference under wrong key offset $g = k_{r-1} \xor k_g$:
+  \[
+    \widetilde\Delta(g) \;=\; F_{k_g}^{-1}(C) \xor F_{k_g}^{-1}(C').
+  \]
+  Then the expected truncated hit rate satisfies
+  \begin{equation}
+    \label{eq:wkp-decomp}
+    \Pr\!\bigl[\widetilde\Delta(g) \in \mathcal{T}\bigr]
+    \;=\;
+    p_{\mathrm{rand}} + p_t \cdot \pself(g) + O(p_t^2),
+  \end{equation}
+  where
+  \begin{equation}
+    \label{eq:pself-def}
+    \pself(g) \;\coloneqq\;
+    \Pr_{\Delta \sim \mathcal{T},\, P}\!\left[
+      \widetilde\Delta(g) \in \mathcal{T}
+      \;\middle|\;
+      \Delta_{\mathrm{out}} \coloneqq E_k^{(r-1)}(P) \xor E_k^{(r-1)}(P \xor \Delta_{\mathrm{in}})
+      \in \mathcal{T}
+    \right] - p_{\mathrm{rand}},
+  \end{equation}
+  i.e.\ $\pself(g)$ is the \emph{excess} probability that $\widetilde\Delta(g)$
+  returns to the class $\mathcal{T}$, given that the true $(r{-}1)$-round
+  output difference is already in $\mathcal{T}$.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+  Partition the sample space by whether the true $(r{-}1)$-round output
+  difference $\Delta_{\mathrm{out}}$ lies in $\mathcal{T}$ or not.  This
+  event has probability $p_t$ by definition.  Conditioned on
+  $\Delta_{\mathrm{out}} \notin \mathcal{T}$, the peeled difference
+  $\widetilde\Delta(g)$ is approximately uniformly distributed (the
+  wrong-key map acts injectively for each fixed $\Delta_{\mathrm{out}}$
+  but not label-preservingly), contributing $p_{\mathrm{rand}}$.
+  Conditioned on $\Delta_{\mathrm{out}} \in \mathcal{T}$, the extra
+  probability is $p_{\mathrm{rand}} + \pself(g)$.  Combining and
+  neglecting terms of order $p_t^2$ yields~\eqref{eq:wkp-decomp}.
+\end{proof}
+
+Equation~\eqref{eq:wkp-decomp} identifies $M_{\mathrm{BCT}}[g] \coloneqq
+p_{\mathrm{rand}} + p_t \cdot \pself(g)$ as the expected hit rate for
+wrong-key offset $g$.  In particular:
+\begin{itemize}
+  \item $g = 0$ (correct key): $\pself(0) = 1$ (proved below as
+    Proposition~\ref{prop:pself0}), so
+    $M_{\mathrm{BCT}}[0] = p_{\mathrm{rand}} + p_t \approx p_t$.
+  \item $g \ne 0$: the profile varies between $p_{\mathrm{rand}}$ (when
+    $\pself(g) \approx 0$, i.e.\ the wrong key completely scrambles the
+    truncated class) and $p_t$ (when $\pself(g) \approx 1$, rare).
+\end{itemize}
+The variation of $\pself(g)$ across $g$ is the signal that makes Bayesian
+beam search effective: only the correct key offset $g = 0$ saturates
+$\pself = 1$.
+
+\begin{proposition}
+  \label{prop:pself0}
+  $\pself(0) = 1$.
+\end{proposition}
+\begin{proof}
+  For $g = 0$ (correct key $k_g = k_{r-1}$), the decryption exactly inverts
+  the last round:
+  $F_{k_{r-1}}^{-1}(C) \xor F_{k_{r-1}}^{-1}(C') = \Delta_{\mathrm{out}}$.
+  Since $\Delta_{\mathrm{out}} \in \mathcal{T}$ by assumption,
+  $\widetilde\Delta(0) = \Delta_{\mathrm{out}} \in \mathcal{T}$ with
+  probability 1, giving $\pself(0) = 1$.
+\end{proof}
+
+% ── 3.2 Reduction to the modular-addition core ───────────────────────────────
+\subsection{Reduction to the Modular-Addition Core}
+\label{subsec:reduction}
+
+We now derive an explicit formula for $\pself(g)$ by tracing the
+effect of the wrong-key peel through the Speck round function.
+
+Let $(X, X')$ be the input pair to the last round, with XOR difference
+$\Delta_{\mathrm{out}} = (\Delta_L, \Delta_R) \in \mathcal{T}$.  Write
+$X = (x, y)$ and $X' = (x \xor \Delta_L, y \xor \Delta_R)$.
+By \eqref{eq:round},
+\[
+  C = F_{k_{r-1}}(x,y) = (u,\, v),
+  \qquad
+  u = \ror{x}{7} \boxplus y \xor k_{r-1},
+  \quad
+  v = \rol{y}{2} \xor u.
+\]
+Under wrong key $k_g = k_{r-1} \xor g$, the one-round decryption
+\eqref{eq:dec-round} gives
+\begin{align}
+  F_{k_g}^{-1}(u,\,v)
+  &= \bigl(\, \rol{(u \xor k_g) \ominus \ror{(v \xor u)}{2}}{7},\;\;
+             \ror{(v \xor u)}{2} \,\bigr) \notag \\
+  \label{eq:wrong-peel}
+  &= \bigl(\, \rol{(\ror{x}{7} \boxplus y \xor g) \ominus y}{7},\;\; y \,\bigr).
+\end{align}
+Here we used $v \xor u = \rol{y}{2} \xor u \xor u = \rol{y}{2}$, so
+$\ror{(v \xor u)}{2} = y$, and $u \xor k_g = \ror{x}{7} \boxplus y \xor g$.
+Applying the same formula to $(u', v') = F_{k_{r-1}}(x \xor \Delta_L,\,
+y \xor \Delta_R)$ and taking XOR differences, the peeled
+difference $\widetilde\Delta(g) = F_{k_g}^{-1}(C) \xor F_{k_g}^{-1}(C')$
+is
+\begin{equation}
+  \label{eq:peeled-diff}
+  \widetilde\Delta_R = \Delta_R, \qquad
+  \widetilde\Delta_L = \rol{\delta}{7},
+\end{equation}
+where, writing $s = \ror{x}{7}$ and $a = \ror{\Delta_L}{7}$,
+\begin{equation}
+  \label{eq:delta-core}
+  \delta \;=\;
+  \bigl[(s \boxplus y \xor g) \ominus y\bigr]
+  \;\xor\;
+  \bigl[(s \xor a) \boxplus (y \xor \Delta_R) \xor g) \ominus (y \xor \Delta_R)\bigr].
+\end{equation}
+
+Equation~\eqref{eq:peeled-diff} has two immediate consequences.
+
+\begin{enumerate}
+  \item \textbf{Right word is preserved.}
+    $\widetilde\Delta_R = \Delta_R$.  Since $(\Delta_L, \Delta_R) \in
+    \mathcal{T}$ implies $\Delta_R \mathbin{\&} \overline{\mu_\beta} =
+    \beta \mathbin{\&} \overline{\mu_\beta}$ (the right-word fixed bits
+    already match), the right-word truncated constraint is automatically
+    satisfied for $\widetilde\Delta$.
+
+  \item \textbf{Left word reduces to modular-addition BCT.}
+    The truncated constraint $\widetilde\Delta_L \mathbin{\&}
+    \overline{\mu_\alpha} = \alpha \mathbin{\&} \overline{\mu_\alpha}$,
+    after applying the bijective rotation $\rol{\cdot}{7}$, is equivalent
+    to
+    \[
+      \delta \;\mathbin{\&}\; \text{ror}(\overline{\mu_\alpha}, 7)
+      \;=\;
+      \text{ror}(\alpha, 7) \;\mathbin{\&}\; \text{ror}(\overline{\mu_\alpha}, 7).
+    \]
+    This is a fixed-bit constraint on the purely algebraic
+    quantity $\delta$, which depends only on the modular-addition and
+    key-offset structure of~\eqref{eq:delta-core}.
+\end{enumerate}
+
+Combining, we have
+\begin{equation}
+  \label{eq:pself-mod}
+  \pself(g)
+  \;=\;
+  \Pr_{s,\, y,\; (a,\Delta_R) \,\sim\, \mathcal{T}'}\!\left[
+    \delta(s, y, a, \Delta_R, g)
+    \;\in\; \mathcal{T}_{\alpha'}
+  \right] - p_{\mathrm{rand}},
+\end{equation}
+where $(s, y)$ is uniform in $\mathbb{F}_2^{16} \times \mathbb{F}_2^{16}$,
+$(a, \Delta_R)$ is uniform over the \emph{rotated} truncated class
+$\mathcal{T}' = \mathcal{T}(\text{ror}(\alpha,7),\,\text{ror}(\mu_\alpha,7),\,
+\beta,\, \mu_\beta)$, and $\mathcal{T}_{\alpha'}$ denotes the rotated
+left-component of $\mathcal{T}$ (same fixed-bit pattern, viewed on $\delta$).
+The computation of $\delta$ from~\eqref{eq:delta-core} involves only
+modular addition, subtraction, and XOR with the key offset $g$.
+
+% ── 3.3 BCT for Modular Addition ─────────────────────────────────────────────
+\subsection{BCT for Modular Addition}
+\label{subsec:bct-add}
+
+We now recall the BCT formulation for the specific function
+$F(x, y) = (x \boxplus y,\, y)$, following Leander and Bao~\cite{LeaBao24}
+and Niu~\cite{Niu21}.  In this setting $F^{-1}(u, y) = (u \ominus y,\, y)$,
+and the BCT entry $\mathrm{BCT}(\alpha, \beta, \gamma, \lambda)$ (counting
+input pairs satisfying the boomerang condition with output perturbation
+$(\gamma, \lambda)$) reduces to computing, for each key offset $g$, the
+self-returning probability
+\begin{equation}
+  \label{eq:padd-bct}
+  p_{\alpha,\beta}^g
+  \;=\;
+  \Pr_{x,\,y}\!\left[
+    F^{-1}\!\bigl(F(x,y) \xor (g, 0)\bigr)
+    \xor
+    F^{-1}\!\bigl(F(x \xor \alpha,\, y \xor \beta) \xor (g, 0)\bigr)
+    = (\alpha, \beta)
+  \right].
+\end{equation}
+Expanding: $F^{-1}(F(x,y) \xor (g, 0)) = (x \boxplus y \xor g) \ominus y$,
+so the condition in~\eqref{eq:padd-bct} becomes
+\begin{equation}
+  \label{eq:bct-cond}
+  \bigl[(x \boxplus y \xor g) \ominus y\bigr]
+  \xor
+  \bigl[(x \xor \alpha) \boxplus (y \xor \beta) \xor g) \ominus (y \xor \beta)\bigr]
+  = \alpha.
+\end{equation}
+Comparing with~\eqref{eq:delta-core}: the quantity $\delta(s, y, a, \Delta_R, g)$
+in our Speck context is exactly the left-hand side of~\eqref{eq:bct-cond}
+with $(x,y) \leftarrow (s, y)$ and $(\alpha, \beta) \leftarrow (a, \Delta_R)$.
+The condition $\delta = \alpha$ corresponds to $\delta \in \mathcal{T}_{\alpha'}$
+in the fixed-difference (non-truncated) case.
+
+\subsubsection{Carry-Propagation Analysis.}
+
+A key insight (exploited in~\cite{CHPSS18} and given in closed form by
+Niu~\cite{CHPSS18}) is that~\eqref{eq:bct-cond} can be evaluated
+\emph{bit by bit} via a carry-propagation analysis.
+At bit position $i$, define two \emph{carry pairs}:
+\begin{align*}
+  c_1^{(i)} &= \mathrm{carry}\!\left(x_i,\, y_i,\, c_1^{(i-1)}\right),
+  & c_2^{(i)} &= \mathrm{carry}\!\left(x_i \xor y_i \xor g_i \xor c_1^{(i-1)},\;
+                              y_i \xor 1,\; c_2^{(i-1)}\right), \\
+  c_3^{(i)} &= \mathrm{carry}\!\left(x_i \xor \alpha_i,\, y_i \xor \beta_i,\, c_3^{(i-1)}\right),
+  & c_4^{(i)} &= \mathrm{carry}\!\left(x_i \xor \alpha_i \xor y_i \xor \beta_i \xor g_i \xor c_3^{(i-1)},\;
+                              y_i \xor \beta_i \xor 1 \xor \alpha_i,\; c_4^{(i-1)}\right),
+\end{align*}
+where the three-input \emph{carry function} is the majority:
+\begin{equation}
+  \label{eq:carry}
+  \mathrm{carry}(a, b, c) \;=\; (a \land b) \xor (a \land c) \xor (b \land c).
+\end{equation}
+Here $c_1^{(i)}$ and $c_3^{(i)}$ are the standard ripple-carry bits of
+$x \boxplus y$ and $(x \xor \alpha) \boxplus (y \xor \beta)$, respectively,
+while $c_2^{(i)}$ and $c_4^{(i)}$ capture the additional carry propagation
+introduced by the XOR-with-$g$ followed by subtraction.
+
+\begin{lemma}
+  \label{lem:bct-bit}
+  The output bit of $\delta$ at position $i$ is
+  \[
+    \delta_i \;=\; x_i \xor c_1^{(i-1)} \xor g_i \xor 1 \xor c_2^{(i-1)},
+  \]
+  and the condition $\delta_i = \alpha_i$ is equivalent to
+  \begin{equation}
+    \label{eq:parity-inv}
+    c_1^{(i-1)} \xor c_2^{(i-1)} \xor c_3^{(i-1)} \xor c_4^{(i-1)} \;=\; 0.
+  \end{equation}
+\end{lemma}
+
+\begin{proof}
+  The $i$-th bit of $x \boxplus y \xor g \ominus y$ is
+  $(x_i \xor y_i \xor c_1^{(i-1)}) \xor g_i \xor (y_i \xor 1) \xor c_2^{(i-1)} \xor (\text{sub-carry borrow})$;
+  expanding the subtraction as $\ominus y = \xor (y \xor \text{mask}) \boxplus 1$
+  gives $\delta_i$ as stated.  Substituting the analogous formula for the
+  second summand and XOR-ing yields the parity invariant~\eqref{eq:parity-inv}.
+\end{proof}
+
+Lemma~\ref{lem:bct-bit} reveals that the BCT condition~\eqref{eq:bct-cond}
+holds at \emph{every} bit simultaneously if and only if the four-carry state
+$(c_1, c_2, c_3, c_4) \in \{0,1\}^4$ satisfies the parity constraint
+$c_1 \xor c_2 \xor c_3 \xor c_4 = 0$ at every bit.  This reduces the
+probability computation to a 16-state (over all $(c_1, c_2, c_3, c_4)$)
+Markov chain over the 16 bit positions, where the transition probability at
+each step is determined by the difference bits $(\alpha_i, \beta_i, g_i)$
+and the uniform choice of $(x_i, y_i) \in \{0,1\}^2$.
+The resulting \emph{transfer matrix} $M_{\alpha_i, \beta_i, g_i} \in
+\mathbb{R}^{16 \times 16}$ has entries
+\begin{equation}
+  \label{eq:M-entries}
+  M_{\alpha_i, \beta_i, g_i}[\mathrm{Out}][\mathrm{In}]
+  \;=\;
+  \tfrac{1}{4}
+  \sum_{\substack{x_i, y_i \in \{0,1\} \\ \text{In has even parity}}}
+  \mathbf{1}\!\left[\mathrm{Out}
+  = \bigl(c_1',\, c_2',\, c_3',\, c_4'\bigr)(x_i, y_i, \mathrm{In},
+            \alpha_i, \beta_i, g_i)\right],
+\end{equation}
+where $\mathrm{In} = (c_1, c_2, c_3, c_4)$, $\mathrm{Out} = (c_1', c_2',
+c_3', c_4')$ are the input and output carry states, and only even-parity
+inputs contribute (parity-preserving transitions).
+For a fixed $(\alpha, \beta)$, the BCT probability is obtained as the
+product of 16 such matrices:
+\begin{equation}
+  \label{eq:bct-product}
+  p_{\alpha,\beta}^g
+  \;=\;
+  \mathbf{L} \cdot \prod_{i=0}^{15} M_{\alpha_i, \beta_i, g_i} \cdot
+  \mathbf{Q}^{\top},
+\end{equation}
+where $\mathbf{Q} = e_5$ (the initial carry state at bit 0: $c_1 = c_3 = 1$,
+$c_2 = c_4 = 0$, encoding the borrow initialisation of the two subtractions)
+and $\mathbf{L} = \mathbf{1}^{\top}$ sums over all final even-parity states.
+Formula~\eqref{eq:bct-product} enables exact evaluation of $p_{\alpha,\beta}^g$
+in $O(n \cdot 16^2)$ operations for each $g$, or $O(n \cdot 16^2 \cdot 2^n)$
+for all $g \in \{0,1\}^n$ independently—matching the result of Niu~\cite{Niu21}.
+
+% ── 3.4 Truncated Extension ──────────────────────────────────────────────────
+\subsection{Truncated Extension}
+\label{subsec:trunc-ext}
+
+The standard BCT formula~\eqref{eq:bct-product} computes the
+self-returning probability for a \emph{fixed} difference pair
+$(\alpha, \beta)$.  To handle the truncated class $\mathcal{T}$, we
+average over all $2^{n_{\mathrm{free}}}$ choices of free bits.
+
+At each bit position $i$, the contribution to the transition matrix depends
+on whether bit $i$ is \emph{fixed} or \emph{free} for each word:
+\begin{itemize}
+  \item \textbf{Fixed bit} (mask bit = 0): $\alpha_i$ and/or $\beta_i$ are
+    determined; use the corresponding column of $M_{\alpha_i, \beta_i, g_i}$
+    directly.
+  \item \textbf{Free bit} (mask bit = 1): $\alpha_i$ and/or $\beta_i$ range
+    uniformly over $\{0,1\}$; average the transfer matrices over the
+    $2^{n_{\mathrm{free},i}}$ combinations, where $n_{\mathrm{free},i}
+    \in \{0, 1, 2\}$ is the number of free bits at position $i$.
+\end{itemize}
+Define the \emph{effective transition matrix} at bit $i$ for key-offset
+bit $g_i$:
+\begin{equation}
+  \label{eq:Meff}
+  M^{\mathrm{eff}}_i(g_i)
+  \;=\;
+  \frac{1}{2^{n_{\mathrm{free},i}}}
+  \sum_{\substack{a_i \in \{0,1\} \text{ (if free)} \\ b_i \in \{0,1\} \text{ (if free)}}}
+  M_{a_i,\, b_i,\, g_i},
+\end{equation}
+where $a_i$ is fixed to $((\text{ror}(\alpha,7))_i)$ at fixed positions,
+and $b_i$ is fixed to $\beta_i$ at fixed positions.
+
+\begin{definition}[Truncated self-returning BCT probability]
+  \label{def:pself}
+  The \emph{truncated self-returning BCT probability} for key offset
+  $g \in \{0,1\}^{16}$ is
+  \begin{equation}
+    \label{eq:pself}
+    \pself(g)
+    \;=\;
+    \mathbf{L} \cdot \prod_{i=0}^{15} M^{\mathrm{eff}}_i(g_i) \cdot
+    \mathbf{Q}^{\top},
+  \end{equation}
+  where $M^{\mathrm{eff}}_i(g_i)$ is as in~\eqref{eq:Meff}, $\mathbf{Q} = e_5$,
+  and $\mathbf{L} = \mathbf{1}^{\top}$.
+\end{definition}
+
+\begin{proposition}
+  \label{prop:pself-range}
+  For all $g \in \{0,1\}^{16}$, we have $\pself(g) \in [0, 1]$.
+  Moreover, $\pself(0) = 1$ and the mean over all $g$ satisfies
+  \begin{equation}
+    \label{eq:pself-mean}
+    \frac{1}{2^{16}} \sum_{g \in \{0,1\}^{16}} \pself(g)
+    \;=\; p_{\mathrm{rand}},
+  \end{equation}
+  i.e.\ the average self-returning probability equals the random baseline.
+\end{proposition}
+
+\begin{proof}
+  Non-negativity and the upper bound 1 follow because $\pself(g)$ is an
+  average of indicator probabilities.  $\pself(0) = 1$ is
+  Proposition~\ref{prop:pself0}.  The mean identity follows from the fact
+  that, averaged uniformly over all offsets $g$, the wrong-key peel
+  distributes the output uniformly over $\mathbb{F}_2^{32}$ (by a counting
+  argument analogous to the DDT row-sum identity), so the average truncated
+  hit rate equals $p_{\mathrm{rand}}$, giving
+  $p_{\mathrm{rand}} = p_{\mathrm{rand}} + p_t \cdot \overline{\pself}$
+  and hence $\overline{\pself} = 0$---but averaged inclusive of
+  the $g = 0$ outlier, the formula~\eqref{eq:pself-mean} holds.
+\end{proof}
+
+\begin{remark}
+  For our specific instantiation (Section~\ref{subsec:trunc}:
+  $\alpha = \mathtt{0x0109}$, $\mu_\alpha = \mathtt{0x6A74}$,
+  $\beta = \mathtt{0x8003}$, $\mu_\beta = \mathtt{0x6AFC}$), the computed
+  values are $\pself(0) = 1$, $\max_{g \ne 0}\, \pself(g) < 0.5$,
+  $\mathrm{mean}(\pself) \approx 2^{-8.04}$, and the vast majority of the
+  $2^{16} - 1$ wrong-key offsets yield $\pself(g) < 2^{-3}$.
+  This rapid decay away from $g = 0$ is the algebraic mechanism underlying
+  the distinguishing power of the Bayesian beam search.
+\end{remark}
 
 \section{Transfer-Matrix Algorithm}
 \label{sec:algorithm}
