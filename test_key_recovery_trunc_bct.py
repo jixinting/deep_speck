@@ -12,8 +12,8 @@ Input difference to Speck: (0x0040, 0x0000)
 Attack parameters (user-specified):
   p_t       = 2^{-11}   truncated differential probability
   threshold = 2^{-5}    chosen from BCT WKP
-  D         = p_t * threshold = 2^{-16}   score normalisation
-  score(k') = #{hits(k')} / D    (beam-search ranking)
+  D         = 1 / (p_t * threshold) = 2^{16}   score normalisation
+  score(k') = #{hits(k')} * D    (beam-search ranking)
   E[score | wrong key offset g] = P_RAND + p_t * pself[g]
 """
 
@@ -35,9 +35,9 @@ WORD_SIZE = sp.WORD_SIZE()   # 16
 
 P_T    = 2.0 ** (-11)    # truncated differential probability
 THRESH = 2.0 ** (-5)     # threshold parameter (from BCT WKP)
-D      = P_T * THRESH    # = 2^{-16}, score normalisation constant
-# score(k') = #{hits(k')} / D   → E[score | correct key] = P_T/D = 2^5 = 32/N_pairs
-# v(k')     = log2(#{hits}/D)   → used for beam-search ranking
+D      = 1.0 / (P_T * THRESH)   # = 2^{16}, score normalisation constant
+# score(k') = #{hits(k')} * D   → E[score | correct key] = N * P_T * D = N/THRESH
+# v(k')     = log2(#{hits}*D)   → used for beam-search ranking
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  §2  Truncated differential class
@@ -60,7 +60,7 @@ print(f"[trunc-diff]  A=0x{A:04X}/AM=0x{AM:04X}  B=0x{B:04X}/BM=0x{BM:04X}")
 print(f"[trunc-diff]  N_free={N_FREE}  N_fixed={N_FIXED}  "
       f"P_rand=2^(-{N_FIXED})={P_RAND:.2e}")
 print(f"[attack]      P_T=2^-11={P_T:.2e}  "
-      f"threshold=2^-5={THRESH:.4f}  D=2^-16={D:.2e}")
+      f"threshold=2^-5={THRESH:.4f}  D=2^16={D:.2e}")
 print(f"[attack]      SNR = P_T/P_RAND = {P_T/P_RAND:.1f}x = 2^{log2(P_T/P_RAND):.1f}")
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -271,8 +271,8 @@ def bayesian_key_recovery(cts, m=M_BCT, s=S_BCT, num_cand=32, num_iter=5,
         # v = log2(hits / D)  → beam ranking score
         hits_count   = hit.sum(axis=1)              # (num_cand,)
         v = np.where(hits_count > 0,
-                     np.log2(hits_count / D),
-                     np.log2(0.5 / D))              # floor for zero hits
+                     np.log2(hits_count * D),
+                     np.log2(0.5 * D))              # floor for zero hits
 
         all_v   [i * num_cand:(i+1) * num_cand] = v
         all_keys[i * num_cand:(i+1) * num_cand] = keys.copy()
@@ -316,8 +316,8 @@ def verifier_search(cts, best_guess, use_n=128):
 
     hits_count = hit.sum(axis=1)
     v = np.where(hits_count > 0,
-                 np.log2(hits_count / D) * len(cts[0]) / use_n,
-                 np.log2(0.5 / D) * len(cts[0]) / use_n)
+                 np.log2(hits_count * D) * len(cts[0]) / use_n,
+                 np.log2(0.5 * D) * len(cts[0]) / use_n)
 
     m_idx  = int(np.argmax(v))
     return keys1[m_idx], keys2[m_idx], float(v[m_idx])
