@@ -351,7 +351,314 @@ Section~\ref{sec:conclusion} concludes and discusses open problems.
 
 \section{Preliminaries}
 \label{sec:prelim}
-[To be written.]
+
+% ── 2.1 Notation ─────────────────────────────────────────────────────────────
+\subsection{Notation}
+
+We write $\mathbb{F}_2^n$ for the vector space of $n$-bit strings over $\{0,1\}$
+and $\mathbb{Z}_{2^n}$ for the ring of integers modulo $2^n$.
+Throughout the paper the block operates on pairs of 16-bit words; we
+identify $\mathbb{F}_2^{16}$ with $\mathbb{Z}_{2^{16}}$ whenever the
+interpretation is clear from context.
+The XOR of two bit strings $a,b \in \mathbb{F}_2^n$ is written $a \xor b$,
+modular addition in $\mathbb{Z}_{2^{16}}$ is written $a \boxplus b$, and
+bitwise AND is written $a \mathbin{\&} b$.
+For $a \in \mathbb{F}_2^{16}$ we write $a \ggg r$ (resp.\ $a \lll r$) for the
+right (resp.\ left) rotation of $a$ by $r$ bit positions.
+The Hamming weight of a bit string $a$ is written $\mathrm{wt}(a)$.
+
+% ── 2.2 Speck32/64 ───────────────────────────────────────────────────────────
+\subsection{The \speck{} Block Cipher}
+
+\speck{}~\cite{BRRSSST13} is a member of the Simon/Speck family of
+lightweight ARX (Add-Rotate-XOR) block ciphers.  It operates on a
+32-bit block, represented as a pair $(x, y) \in \mathbb{F}_2^{16} \times
+\mathbb{F}_2^{16}$, under a 64-bit key.
+
+\paragraph{Round function.}
+The encryption round function $F_k : \mathbb{F}_2^{16} \times
+\mathbb{F}_2^{16} \to \mathbb{F}_2^{16} \times \mathbb{F}_2^{16}$
+parameterised by the round subkey $k \in \mathbb{F}_2^{16}$ is
+\begin{equation}
+  \label{eq:round}
+  F_k(x, y) \;=\;
+  \bigl(\,x' ,\; y'\bigr),
+  \qquad
+  x' = \ror{x}{7} \boxplus y \xor k, \quad
+  y' = \rol{y}{2} \xor x'.
+\end{equation}
+The decryption round function $F_k^{-1}(x', y')$ is given by
+\begin{equation}
+  \label{eq:dec-round}
+  y = \ror{(y' \xor x')}{2}, \quad
+  x = \rol{(x' \xor k \ominus y)}{7},
+\end{equation}
+where $\ominus$ denotes subtraction modulo $2^{16}$.
+
+\paragraph{Key schedule.}
+A 64-bit master key is parsed as four 16-bit words
+$(k^{(3)}, k^{(2)}, k^{(1)}, k^{(0)})$.
+The initial subkey is $k_0 = k^{(3)}$, and three auxiliary words
+$(\ell_0, \ell_1, \ell_2) = (k^{(0)}, k^{(1)}, k^{(2)})$ are maintained.
+For $i = 0, 1, \ldots, r-2$ (with $r$ the number of rounds):
+\begin{equation}
+  \label{eq:keyschedule}
+  \ell_{i+3} = \ror{\ell_{i}}{7} \boxplus k_i \xor i, \qquad
+  k_{i+1}    = \rol{k_i}{2} \xor \ell_{i+3}.
+\end{equation}
+The full key schedule for $r = 22$ rounds (the full \speck{} specification)
+produces subkeys $k_0, k_1, \ldots, k_{21}$.
+In our attack we target a reduced-round variant with $r \in \{7, 8, \ldots, 11\}$
+rounds; the last round subkey is $k_{r-1}$ and the penultimate is $k_{r-2}$.
+
+% ── 2.3 Differential Cryptanalysis and the DDT ───────────────────────────────
+\subsection{Differential Cryptanalysis and the DDT}
+
+Let $E_k : \mathbb{F}_2^{32} \to \mathbb{F}_2^{32}$ denote an
+$r$-round block cipher with key $k$.
+Given a pair of plaintexts $(P, P')$ with XOR difference
+$\Delta_{\mathrm{in}} = P \xor P'$, the corresponding output difference
+is $\Delta_{\mathrm{out}} = E_k(P) \xor E_k(P')$.
+A \emph{differential} $(\Delta_{\mathrm{in}} \to \Delta_{\mathrm{out}})$
+holds with \emph{differential probability}
+\begin{equation}
+  \mathrm{DP}(\Delta_{\mathrm{in}} \to \Delta_{\mathrm{out}})
+  \;=\;
+  \Pr_{P}\!\bigl[E_k(P) \xor E_k(P \xor \Delta_{\mathrm{in}})
+        = \Delta_{\mathrm{out}}\bigr].
+\end{equation}
+
+The \emph{difference distribution table} (DDT) of a mapping
+$f : \mathbb{F}_2^n \to \mathbb{F}_2^m$ is the $2^n \times 2^m$ array
+\begin{equation}
+  \DDT[a][b]
+  \;=\;
+  \#\!\bigl\{\, x \in \mathbb{F}_2^n \;\big|\; f(x) \xor f(x \xor a) = b\bigr\},
+\end{equation}
+so that $\mathrm{DP}(a \to b) = \DDT[a][b] / 2^n$ for a uniform
+input distribution.  For the modular-addition map
+$\mathrm{add}(x,y) = x \boxplus y$, an efficient bit-parallel formula for
+$\DDT[(\delta_x, \delta_y)][\delta_z]$ was given by Lipmaa and
+Moriai~\cite{LM01} and provides the computational backbone for DDT-based
+distinguishers on ARX ciphers.
+
+% ── 2.4 Truncated Differentials ──────────────────────────────────────────────
+\subsection{Truncated Differentials}
+\label{subsec:trunc}
+
+Truncated differentials, introduced by Knudsen~\cite{Knu94}, relax
+the requirement that a specific output difference is observed, instead
+specifying only that the output difference falls within some set
+$\mathcal{T} \subseteq \mathbb{F}_2^{32}$.
+
+\begin{definition}[Truncated differential class]
+  \label{def:trunc-class}
+  Let $\alpha, \mu_\alpha \in \mathbb{F}_2^{16}$ and
+  $\beta,  \mu_\beta  \in \mathbb{F}_2^{16}$ be \emph{representative} and
+  \emph{free-bit mask} words, respectively.
+  The associated \emph{truncated class} is
+  \begin{equation}
+    \mathcal{T}(\alpha, \mu_\alpha, \beta, \mu_\beta)
+    \;\coloneqq\;
+    \bigl\{(\Delta_L, \Delta_R) \in \mathbb{F}_2^{16} \times \mathbb{F}_2^{16}
+    \;\big|\;
+    \Delta_L \mathbin{\&} \overline{\mu_\alpha} = \alpha \mathbin{\&} \overline{\mu_\alpha},\;
+    \Delta_R \mathbin{\&} \overline{\mu_\beta}  = \beta  \mathbin{\&} \overline{\mu_\beta}
+    \bigr\},
+  \end{equation}
+  where $\overline{\mu}$ denotes the bitwise complement of $\mu$.
+  Bits in positions where $\mu_\alpha = 1$ (resp.\ $\mu_\beta = 1$) are
+  \emph{free} (unrestricted); the remaining bits are \emph{fixed} and must
+  equal the corresponding bits of $\alpha$ (resp.\ $\beta$).
+\end{definition}
+
+Writing $n_{\mathrm{free}} = \mathrm{wt}(\mu_\alpha) + \mathrm{wt}(\mu_\beta)$
+and $n_{\mathrm{fixed}} = 32 - n_{\mathrm{free}}$, we have
+$|\mathcal{T}| = 2^{n_{\mathrm{free}}}$.  The \emph{truncated differential
+probability} is
+\begin{equation}
+  p_{\mathcal{T}}(\Delta_{\mathrm{in}}) \;=\;
+  \Pr_P\!\bigl[E_k(P) \xor E_k(P \xor \Delta_{\mathrm{in}}) \in \mathcal{T}\bigr].
+\end{equation}
+For a uniformly random 32-bit output difference, the probability of
+falling in $\mathcal{T}$ is
+\begin{equation}
+  \label{eq:prand}
+  p_{\mathrm{rand}} \;=\; 2^{n_{\mathrm{free}}} / 2^{32} \;=\; 2^{-n_{\mathrm{fixed}}}.
+\end{equation}
+A truncated distinguisher is effective when
+$p_{\mathcal{T}}(\Delta_{\mathrm{in}}) \gg p_{\mathrm{rand}}$.
+
+\paragraph{Instantiation.}
+In this paper we fix the input difference
+$\Delta_{\mathrm{in}} = (\mathtt{0x0040}, \mathtt{0x0000})$ and the
+truncated class
+\begin{equation}
+  \label{eq:our-class}
+  \alpha = \mathtt{0x0109},\quad
+  \mu_\alpha = \mathtt{0x6A74},\quad
+  \beta  = \mathtt{0x8003},\quad
+  \mu_\beta  = \mathtt{0x6AFC}.
+\end{equation}
+This gives $n_{\mathrm{free}} = 18$, $n_{\mathrm{fixed}} = 14$, and
+$p_{\mathrm{rand}} = 2^{-14}$.
+The truncated differential probability through the relevant round range
+is $p_t = 2^{-11}$, yielding a signal-to-noise ratio
+$p_t / p_{\mathrm{rand}} = 2^{3} = 8$.
+
+% ── 2.5 Boomerang Connectivity Table ─────────────────────────────────────────
+\subsection{Boomerang Connectivity Table}
+
+The \emph{boomerang connectivity table}
+(BCT)~\cite{CHPSS18} characterises how a cipher's middle round
+function simultaneously satisfies two differential transitions—one in
+the encryption direction and one in the decryption direction.
+
+\begin{definition}[BCT~{\cite{CHPSS18}}]
+  \label{def:bct}
+  Let $f : \mathbb{F}_2^n \to \mathbb{F}_2^n$ be a permutation.
+  The BCT of $f$ is the $2^n \times 2^n$ table defined by
+  \begin{equation}
+    \BCT[a][b]
+    \;=\;
+    \#\!\bigl\{\, x \in \mathbb{F}_2^n \;\big|\;
+    f^{-1}(f(x) \xor b) \xor f^{-1}(f(x \xor a) \xor b) = a\bigr\}.
+  \end{equation}
+\end{definition}
+
+A BCT entry $\BCT[a][b] = 2^n$ indicates a \emph{boomerang switch}: every
+input $x$ simultaneously supports the forward differential $a \to b$
+and the backward differential $b \to a$.  In our work we repurpose the
+algebraic structure underlying BCT computations—specifically the
+carry-propagation analysis of modular addition—to derive, for each
+key offset $g$, the probability that the truncated class $\mathcal{T}$
+maps to itself under one round of \speck{} with that key offset
+(Section~\ref{sec:bct}).
+
+% ── 2.6 Gohr's Bayesian Key-Recovery Framework ───────────────────────────────
+\subsection{Gohr's Bayesian Key-Recovery Framework}
+\label{subsec:gohr}
+
+Gohr~\cite{Goh19} introduced a Bayesian key-recovery framework for
+reduced-round \speck{} built around three tightly coupled components.
+We recall them here in the notation used throughout this paper.
+
+\paragraph{Data generation.}
+Fix a target input difference
+$\Delta_{\mathrm{in}} \in \mathbb{F}_2^{32}$.
+The attacker collects $S$ \emph{structures}, each consisting of $N$
+ciphertext pairs $(C, C') = (E_k(P),\, E_k(P \xor \Delta_{\mathrm{in}}))$
+encrypted under the same unknown key $k$.
+All pairs in a structure share the same input difference
+$\Delta_{\mathrm{in}}$ but use independent uniformly random base
+plaintexts $P$.
+
+\paragraph{One-round decryption peel.}
+For each candidate last-round subkey $k' \in \mathbb{F}_2^{16}$,
+the attacker partially decrypts each ciphertext pair by one round:
+\begin{equation}
+  \label{eq:peel}
+  (\tilde{C},\, \tilde{C}') \;=\;
+  \bigl(F_{k'}^{-1}(C),\; F_{k'}^{-1}(C')\bigr),
+  \qquad
+  \widetilde{\Delta} \;=\; \tilde{C} \xor \tilde{C}'.
+\end{equation}
+If $k' = k_{r-1}$ (the correct last-round subkey), then
+$\widetilde{\Delta}$ is the output difference of the $(r-1)$-round
+reduced cipher, which is governed by the $(r-1)$-round differential
+distribution.  If $k' \ne k_{r-1}$, the decryption is \emph{wrong} and
+$\widetilde{\Delta}$ is approximately uniform over $\mathbb{F}_2^{32}$.
+
+\paragraph{Distinguisher score and wrong-key profile.}
+In Gohr's original framework, the distinguisher is a trained deep
+residual network $h : \mathbb{F}_2^{64} \to (0,1)$ that takes the
+bit representation of $(C, C')$ as input and outputs the probability
+that the pair arises from a real differential.  After applying the
+one-round peel~\eqref{eq:peel}, the network score is
+$h(\tilde{C}, \tilde{C}')$, and the per-pair log-likelihood ratio
+(LLR) is $\ell(k') = \log_2\bigl(h / (1 - h)\bigr)$.
+
+For the beam search, Gohr pre-computes the \emph{wrong-key
+profile} (WKP): for each 16-bit offset $g = k_{r-1} \xor k'$, the
+expected LLR mean $\mu_g$ and standard deviation $\sigma_g$ of the
+network output when pairs are decrypted under the wrong subkey $k'$,
+sampled empirically over $\approx 10^6$ pairs.  These statistics are
+used to score a set of subkey candidates via a Bayesian
+$\ell^2$ residual:
+\begin{equation}
+  \label{eq:gohr-score}
+  \mathrm{score}_{\mathrm{Gohr}}(k' \mid \mathcal{S})
+  \;=\;
+  \sum_{j \in \mathcal{S}}
+  \left(\frac{\bar{\ell}_j(k') - \mu_{k_{r-1} \xor k'}}
+             {\sigma_{k_{r-1} \xor k'}}\right)^{\!2},
+\end{equation}
+where $\bar{\ell}_j(k')$ is the empirical mean LLR over the pairs of
+structure $j$ after decryption under $k'$.
+
+\paragraph{Bayesian beam search.}
+The key recovery proceeds as a two-layer nested beam search.
+In the \emph{outer layer}, a pool of $B = 32$ candidate subkeys for
+$k_{r-1}$ is maintained and updated iteratively.  In each iteration,
+a \emph{UCB}-weighted structure is selected~\cite{ACF02}, decrypted
+under the current pool candidates, and scored against the WKP via
+\eqref{eq:gohr-score}.  Candidates whose empirical LLR distribution
+best matches the profile (lowest score) are retained.
+In the \emph{inner layer}, for each $k_{r-1}$ candidate the search
+is repeated to recover $k_{r-2}$ by peeling two rounds.
+A final \emph{verifier} step exhaustively explores the Hamming-weight-$\le 2$
+neighbourhood of the best joint candidate $(k_{r-1}, k_{r-2})$ and
+returns the pair with the highest aggregate hit count.
+
+\paragraph{Our substitutions.}
+In Section~\ref{sec:bct} we replace Gohr's two black-box components:
+\begin{itemize}
+  \item \textbf{Distinguisher score.}
+    Instead of the neural network LLR, we use the truncated differential
+    hit indicator: a pair scores a \emph{hit} under candidate $k'$ if
+    $\widetilde{\Delta} \in \mathcal{T}$, i.e.\ the one-round-peeled
+    difference falls in our truncated class.
+
+  \item \textbf{Wrong-key profile.}
+    Instead of the empirically sampled $(\mu_g, \sigma_g)$, we derive
+    the \emph{expected hit rate} under offset $g$ algebraically:
+    \begin{equation}
+      \label{eq:wkp-ours}
+      M_{\mathrm{BCT}}[g]
+      \;=\;
+      p_{\mathrm{rand}} + p_t \cdot \pself(g),
+    \end{equation}
+    where $\pself(g)$ is the \emph{truncated self-returning BCT
+    probability} defined and computed in Sections~\ref{sec:bct}
+    and~\ref{sec:algorithm}.
+    The precision weight used in the Bayesian residual is
+    \begin{equation}
+      \label{eq:wkp-weight}
+      S_{\mathrm{BCT}}[g]
+      \;=\;
+      \frac{1}{\sqrt{M_{\mathrm{BCT}}[g]\,\bigl(1 - M_{\mathrm{BCT}}[g]\bigr)}},
+    \end{equation}
+    the inverse standard deviation of a Bernoulli$\bigl(M_{\mathrm{BCT}}[g]\bigr)$
+    random variable, replacing Gohr's sampled $\sigma_g$.
+\end{itemize}
+
+The reconstructed beam-search score for a pool of $n$ candidate subkeys
+$\{k'_j\}$ evaluated on structure $s$ becomes
+\begin{equation}
+  \label{eq:our-score}
+  \mathrm{score}(k' \mid s)
+  \;=\;
+  \sum_{b \in \{0,1\}^{14}}
+  \left\lVert
+    \bigl(\hat{r}_j(k') - M_{\mathrm{BCT}}[b \xor k'_j]\bigr)
+    \cdot S_{\mathrm{BCT}}[b \xor k'_j]
+  \right\rVert_2,
+\end{equation}
+where $\hat{r}_j(k') = N^{-1}\sum_{i=1}^N \mathbf{1}[\widetilde{\Delta}_i \in \mathcal{T}]$
+is the empirical hit rate of candidate $k'_j$ on structure $s$, and the
+outer sum ranges over all 14-bit true-key low-bit candidates $b$.  The
+beam-search scoring, data generation, and verifier logic are otherwise
+identical to Gohr's original framework.
 
 \section{Truncated Self-Returning BCT Probability}
 \label{sec:bct}
