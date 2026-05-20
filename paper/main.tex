@@ -211,7 +211,7 @@ description.  As a consequence:
 \end{itemize}
 These limitations have prompted a line of follow-up work aimed at
 understanding why neural distinguishers work as well as they
-do~\cite{BM21,BGMR23,HWW23,LLLW22}, but a complete analytical
+do~\cite{BGMR23,BLY23,HWW23,LLLW22}, but a complete analytical
 reconstruction of Gohr's full key-recovery framework has not yet been
 achieved.
 
@@ -311,18 +311,38 @@ We summarise the contributions of this paper as follows.
 
 \subsubsection{Related work.}
 Neural distinguishers for block ciphers have been studied extensively
-since Gohr's breakthrough.  Baksi et al.~\cite{BM21} explored similar
-approaches for other ciphers; Benamira et al.~\cite{BGMR23} gave a
+since Gohr's breakthrough.  Benamira et al.~\cite{BGMR23} gave a
 partial theoretical explanation of why neural networks can distinguish
-$r$-round \speck{} by identifying the specific statistical features
-learned by the network; Hou et al.~\cite{HWW23} improved distinguisher
-accuracy through enhanced training procedures; and Liu et
-al.~\cite{LLLW22} studied the connection between neural distinguishers
-and classical DDT-based distinguishers.  Closest to our work is the
-independent observation by several authors that the neural distinguisher
-at 5 and 6 rounds is closely approximated by a DDT-based classifier;
-however, no prior work has derived the wrong-key profile algebraically
-or connected it to the BCT.  On the BCT side, the original
+$r$-round \speck{} by identifying specific statistical features learned
+by the network, and showed that the neural distinguisher effectively
+approximates the cipher's DDT together with penultimate-round
+differential distributions.  Hou et al.~\cite{HWW23} improved
+distinguisher accuracy through enhanced training procedures.  Liu et
+al.~\cite{LLLW22} revisited the connection between neural distinguishers
+and the DDT.
+
+Most directly related to our work is Bao, Lu, Yao, and
+Zhang~\cite{BLY23}, who provide an explicit cryptanalytic account of
+the additional information neural distinguishers exploit beyond the DDT:
+the correlation between ciphertext values and intermediate-state
+differences at the last modular addition, recoverable from conditional
+differential probabilities.  Their work significantly advances the
+interpretability of Gohr's framework and extends key-recovery to 14
+rounds of \speck{} in the related-key setting.  Our contribution is
+orthogonal: rather than explaining what the neural distinguisher
+\emph{learns}, we replace it entirely with a truncated differential
+distinguisher and derive its wrong-key profile algebraically via the
+BCT, without any neural network training or sampling.  Together, the
+two lines of work suggest that the statistical learning structure of
+Gohr's framework is recoverable from classical differential tools.
+
+The wrong-key profile as a function of the key offset was studied
+systematically by Leander and Bao~\cite{LeaBao24}, who characterised
+the non-conformity of the wrong-key randomisation hypothesis and showed
+how it can be exploited to reduce attack complexity.  Our BCT-algebraic
+formula for $\pself(g)$ gives a closed-form instance of the same
+phenomenon for the specific case of a one-round truncated differential
+on an ARX cipher.  On the BCT side, the original
 formulation~\cite{CHPSS18} and its extensions~\cite{SBBB19,WQSN19}
 focus on the probability of boomerang quartets in the middle rounds of
 a cipher; our use of BCT-style algebra to compute single-round
