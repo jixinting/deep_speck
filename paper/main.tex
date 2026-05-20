@@ -1295,92 +1295,92 @@ totalling $2^{19}$ ciphertext pairs per trial.
 \subsection{Two-Layer Bayesian Beam Search with UCB Structure Selection}
 \label{subsec:attack-alg}
 
-The full attack is given in Algorithm~\ref{alg:attack}.  It consists
-of three phases: (1) a UCB-guided outer loop that selects structures
-and runs a two-layer beam search to simultaneously recover the last
-two round subkeys $k_{r-1}$ and $k_{r-2}$; (2) a verifier that
-exhaustively explores a Hamming-$\le 2$ neighbourhood of the best
-candidate pair; and (3) an optional recursion to recover further
-subkeys.
+The full attack is split across two algorithms.
+Algorithm~\ref{alg:attack} covers phases~(1) and~(2): a UCB-guided
+outer loop selects ciphertext structures and runs a two-layer beam
+search to simultaneously recover the last two round subkeys
+$k_{r-1}$ and $k_{r-2}$.
+Algorithm~\ref{alg:verifier} covers phase~(3): a verifier exhaustively
+explores the Hamming-$\le 2$ neighbourhood of the best candidate pair
+to correct small errors.
 
-\begin{algorithm}[H]
-\caption{Truncated-BCT Bayesian Key Recovery on $r$-Round \speck{}}
+\begin{algorithm}[t]
+\caption{UCB Two-Layer Beam Search (Phase 1--2)}
 \label{alg:attack}
 \begin{algorithmic}[1]
 \Require Ciphertext structures $\{(C^{(s,i)}, C'^{(s,i)})\}$,
          WKP arrays $M_{\mathrm{BCT}}$, $S_{\mathrm{BCT}}$,
-         beam width $B=32$, iterations $T$,
+         beam width $B$, iterations $T$,
          thresholds $\tau_1, \tau_2$, UCB constant $\alpha$
-\Ensure Subkey pair $(\hat{k}_{r-1}, \hat{k}_{r-2})$
+\Ensure Best candidate $(\hat{k}_1, \hat{k}_2)$ and pod index $s^{\dag}$
 
-\State $v^* \gets -\infty$;\; $(\hat{k}_1, \hat{k}_2) \gets (0, 0)$;\;
+\State $v^* \gets -\infty$;\quad
+       $(\hat{k}_1, \hat{k}_2) \gets (0, 0)$;\quad
        $\ell_{\mathrm{best}}[s] \gets -\infty$,\;
-       $\nu[s] \gets \varepsilon$ \quad for all $s \in [S]$
+       $\nu[s] \gets \varepsilon$ \quad for all $s$
 
-\For{$j = 1$ \textbf{to} $T$} \Comment{UCB structure selection}
-
-  \If{$v^* > \tau_2$}
-    \State \textbf{break} \quad (proceed to verifier)
-  \EndIf
-
-  \State $s^* \gets \arg\max_{s}\!\left[\ell_{\mathrm{best}}[s]
-         + \alpha\sqrt{\tfrac{\log_2(j)}{\nu[s]}}\right]$;\;
+\For{$j = 1$ \textbf{to} $T$}
+  \If{$v^* > \tau_2$} \textbf{break} \EndIf
+  \State $s^* \!\gets\! \arg\max_{s}\!\bigl[\ell_{\mathrm{best}}[s]
+         + \alpha\sqrt{{\log_2 j}/{\nu[s]}}\bigr]$;\quad
          $\nu[s^*] \mathrel{+}= 1$
 
-  \medskip
-  \State \textbf{// --- Layer 1: recover $k_{r-1}$ ---}
-  \State $\mathcal{K}_1 \gets$ random subset of $B$ values in $\{0,1\}^{14}$
-  \For{$\ell = 1$ \textbf{to} $5$} \Comment{inner beam iterations}
+  \Statex \textit{// Layer 1: recover $k_{r-1}$}
+  \State $\mathcal{K}_1 \gets B$ random values in $\{0,1\}^{14}$
+  \For{$\ell = 1$ \textbf{to} $5$}
     \For{each $k' \in \mathcal{K}_1$}
-      \State $\widetilde\Delta^{(i)}(k') \gets
-             F_{k'}^{-1}(C^{(s^*,i)}) \xor F_{k'}^{-1}(C'^{(s^*,i)})$
-             for $i \in [N]$
-      \State $h(k') \gets \#\{i : \widetilde\Delta^{(i)}(k') \in \mathcal{T}\}$
-      \State $\hat{r}(k') \gets h(k') / N$;\quad
-             $v(k') \gets \log_2\!\bigl(h(k') \cdot D\bigr)$
+      \State $h(k') \gets \#\{i : F_{k'}^{-1}(C^{(s^*,i)}) \xor
+             F_{k'}^{-1}(C'^{(s^*,i)}) \in \mathcal{T}\}$
+      \State $\hat{r}(k') \gets h(k')/N$;\quad
+             $v(k') \gets \log_2(h(k') \cdot D)$
     \EndFor
-    \State Score each $b \in \{0,1\}^{14}$:
-    $\displaystyle\sigma(b) \gets
-     \left\lVert\bigl[\hat{r}(k'_j) - M_{\mathrm{BCT}}[b \xor k'_j]\bigr]
-     \cdot S_{\mathrm{BCT}}[b \xor k'_j]\right\rVert_2$
-    \State $\mathcal{K}_1 \gets$ top-$B$ candidates by $-\sigma(\cdot)$
-           with random 2-bit high extension
+    \State $\sigma(b) \gets \bigl\lVert[\hat{r}(k'_j) -
+           M[b \xor k'_j]] \cdot S[b \xor k'_j]\bigr\rVert_2$
+           \;for each $b$
+    \State $\mathcal{K}_1 \gets$ top-$B$ by $-\sigma$ with random
+           2-bit extension
   \EndFor
-  \State Update $\ell_{\mathrm{best}}[s^*] \gets \max(\ell_{\mathrm{best}}[s^*],\,
-         \max_{k'} v(k'))$
+  \State $\ell_{\mathrm{best}}[s^*] \gets
+         \max(\ell_{\mathrm{best}}[s^*],\, \max_{k'} v(k'))$
 
-  \medskip
-  \State \textbf{// --- Layer 2: recover $k_{r-2}$ given $k_{r-1}$ ---}
+  \Statex \textit{// Layer 2: recover $k_{r-2}$ given $k_{r-1}$}
   \If{$\max_{k'} v(k') > \tau_1$}
     \For{each $k_1 \in \mathcal{K}_1$ with $v(k_1) > \tau_1$}
-      \State Peel one more round:
-             $\hat{C}^{(s^*,i)} \gets F_{k_1}^{-1}(C^{(s^*,i)})$,\;
-             $\hat{C}'^{(s^*,i)} \gets F_{k_1}^{-1}(C'^{(s^*,i)})$
-      \State Run Layer-1 beam search on $\{(\hat{C}, \hat{C}')\}$
-             with $B$ candidates for $k_{r-2}$, obtaining
-             $(\mathcal{K}_2, v_2)$
+      \State $(\mathcal{K}_2, v_2) \gets \mathrm{BeamSearch}(
+             \{F_{k_1}^{-1}(C^{(s^*,\cdot)})\},\, B)$
       \If{$\max v_2 > v^*$}
-        \State $v^* \gets \max v_2$;\;
+        \State $v^* \gets \max v_2$;\quad
                $(\hat{k}_1, \hat{k}_2) \gets
-               (k_1,\, \arg\max_{k' \in \mathcal{K}_2} v_2(k'))$
+               (k_1,\, \arg\max v_2)$;\quad
+               $s^{\dag} \gets s^*$
       \EndIf
     \EndFor
   \EndIf
-
 \EndFor
+\Return $(\hat{k}_1, \hat{k}_2, s^{\dag})$
+\end{algorithmic}
+\end{algorithm}
 
-\medskip
-\State \textbf{// --- Verifier: Hamming-$\le 2$ neighbourhood refinement ---}
+\begin{algorithm}[t]
+\caption{Verifier: Hamming-$\le 2$ Neighbourhood Refinement (Phase 3)}
+\label{alg:verifier}
+\begin{algorithmic}[1]
+\Require Best candidate $(\hat{k}_1, \hat{k}_2)$, pod $s^{\dag}$,
+         verifier pairs $N_{\mathrm{ver}} = 128$
+\Ensure Refined subkey pair $(\hat{k}_{r-1}, \hat{k}_{r-2})$
+
 \State $\mathcal{N} \gets \{w \in \{0,1\}^{16} : \mathrm{wt}(w) \le 2\}$
        \quad ($|\mathcal{N}| = 137$)
 \Repeat
-  \State $(k_1^*, k_2^*) \gets \arg\max_{(e_1, e_2) \in \mathcal{N}^2}
-         \log_2\!\bigl(\#\{i : \widetilde\Delta^{(i)}(\hat{k}_1 \xor e_1,
-         \hat{k}_2 \xor e_2) \in \mathcal{T}\} \cdot D\bigr)$
-  \State $(\hat{k}_1, \hat{k}_2) \gets (\hat{k}_1 \xor k_1^*,\;
-         \hat{k}_2 \xor k_2^*)$
+  \State $(e_1^*, e_2^*) \gets \arg\max_{(e_1,e_2)\in\mathcal{N}^2}
+         \log_2\!\bigl(\#\{i \le N_{\mathrm{ver}} :
+         F_{\hat{k}_1 \xor e_1}^{-1}(C^{(s^{\dag},i)}) \xor
+         F_{\hat{k}_1 \xor e_1}^{-1}(C'^{(s^{\dag},i)}) \in
+         \mathcal{T}\} \cdot D\bigr)$
+         \Comment{over two-round peel}
+  \State $(\hat{k}_1, \hat{k}_2) \gets
+         (\hat{k}_1 \xor e_1^*,\; \hat{k}_2 \xor e_2^*)$
 \Until{no improvement}
-
 \Return $(\hat{k}_1, \hat{k}_2)$
 \end{algorithmic}
 \end{algorithm}
@@ -1754,7 +1754,8 @@ $\overline{M_{\mathrm{BCT}}} \approx 6.29 \times 10^{-5}$.}
 
 \paragraph{Setup.}
 
-We evaluate the full two-layer Bayesian attack (Algorithm~\ref{alg:attack})
+We evaluate the full two-layer Bayesian attack
+(Algorithms~\ref{alg:attack}--\ref{alg:verifier})
 on 7-round \speck{} over $n_{\mathrm{trials}} = 50$ independent trials,
 each with a freshly sampled 64-bit master key.
 
@@ -1880,7 +1881,7 @@ statistical model is pre-computed analytically in $0.2$\,s.
     self-returning classes among all possible $g$.
 
   \item \textbf{Fully classical key recovery on 7-round \speck{}.}
-    The two-layer UCB beam search (Algorithm~\ref{alg:attack}) recovers
+    The two-layer UCB beam search (Algorithms~\ref{alg:attack}--\ref{alg:verifier}) recovers
     both last-round subkeys of 7-round \speck{} from $2^{19}$ chosen
     plaintexts with a success rate exceeding $70\%$ and a time complexity
     of approximately $2^{29}$ round-equivalent operations, achieving a
