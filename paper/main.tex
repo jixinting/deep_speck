@@ -1433,9 +1433,240 @@ $N_{\mathrm{ver}}$ & $128$ & verifier pair budget \\
 \end{tabular}
 \end{table}
 
-\section{Data Complexity Analysis}
+\section{Complexity Analysis}
 \label{sec:complexity}
-[To be written.]
+
+We analyse the data, time, and memory complexity of the truncated-BCT
+key-recovery attack on $r$-round \speck{}, following the framework of
+Bao et al.~\cite{BLY23}.  Throughout this section we use the 7-round
+parameter set from Table~\ref{tab:params}.
+
+% ── 6.1 Data Complexity ──────────────────────────────────────────────────────
+\subsection{Data Complexity}
+
+The theoretical data complexity is $2 \cdot S \cdot N$ chosen plaintexts
+(the factor 2 counts both elements of each ciphertext pair):
+\begin{equation}
+  \label{eq:data}
+  \mathcal{D} \;=\; 2 \cdot S \cdot N \;=\; 2 \cdot 32 \cdot 2^{14} \;=\; 2^{20}.
+\end{equation}
+This is the \emph{worst-case} data requirement; in practice early termination
+(when $v^*$ exceeds $\tau_2 = 22$ before all $T = 300$ UCB iterations are
+consumed) reduces actual data usage substantially.
+
+\paragraph{Lower bound on $N$.}
+For the beam search to succeed on a given structure, the correct
+subkey's volume score must exceed the layer-1 threshold $\tau_1 = 18$,
+i.e.\ the hit count must satisfy
+\[
+  h(k_{r-1}) \;\ge\; \frac{2^{\tau_1}}{D}
+  \;=\; \frac{2^{18}}{2^{16}} \;=\; 4.
+\]
+Under the correct key, $h \sim \mathrm{Binomial}(N, p_t)$ with mean
+$N p_t$.  For $N = 2^{14}$:
+\[
+  \mathbb{E}[h] = 2^{14} \cdot 2^{-11} = 8, \qquad
+  \mathrm{Var}[h] \approx 8.
+\]
+By a Poisson approximation, $\Pr[h \ge 4] = 1 - \Pr[\mathrm{Pois}(8) \le 3]
+\approx 1 - 0.0424 > 0.95$, so a single structure of $N = 2^{14}$ pairs
+already exceeds the threshold with probability $\ge 95\%$.  The minimum
+data complexity for a single-trial attack is therefore approximately
+$2N = 2^{15}$ plaintexts (one structure); the use of $S = 32$ structures
+provides redundancy and accelerates convergence of the UCB selector.
+
+\paragraph{Effect of the SNR.}
+The $3$-bit gap $\mathbb{E}[v \mid g{=}0] - \mathbb{E}[v \mid g{\ne}0] = 3$
+(Section~\ref{subsec:datagen}) ensures that the correct subkey consistently
+ranks well above the noise floor.  Tightening the truncated class (more
+fixed bits) would increase $p_t/p_{\mathrm{rand}}$ and reduce data
+requirements but raises the risk that the truncated differential itself
+becomes too rare to detect; the chosen $n_{\mathrm{fixed}} = 14$ balances
+these two effects.
+
+% ── 6.2 Time Complexity ──────────────────────────────────────────────────────
+\subsection{Time Complexity}
+\label{subsec:time}
+
+Following Bao et al.~\cite{BLY23}, we normalise time in units of
+equivalent $r$-round \speck{} encryptions.
+Let $\mathcal{E}$ denote the cost of one $r$-round encryption.
+A single one-round decryption (the elementary operation in the beam
+search) costs $\mathcal{E}/r$.
+
+\paragraph{Online phase.}
+
+The dominant costs per UCB iteration are:
+\begin{enumerate}
+  \item \textbf{Layer-1 beam} ($5$ inner iterations, $B = 32$ candidates,
+    $N = 2^{14}$ pairs): $5 \cdot B \cdot N$ one-round decryptions
+    $= 5 \cdot 32 \cdot 2^{14} = 5 \cdot 2^{19}$ round operations.
+  \item \textbf{Bayesian residual} (\texttt{bayesian\_rank\_kr}):
+    for each inner iteration, an $\mathbb{R}^{B \times 2^{14}}$ matrix-norm
+    computation costing $O(B \cdot 2^{14})$ multiply-adds
+    $= 32 \cdot 2^{14} = 2^{19}$ operations per inner iteration.
+  \item \textbf{Layer-2 beam} (triggered $\sim T_2$ times per trial,
+    each of identical cost to one layer-1 beam call):
+    $T_2 \cdot 5 \cdot B \cdot N$ round operations, where $T_2 \le T$.
+\end{enumerate}
+
+Over $T = 300$ outer UCB iterations with at most $T_2 \approx [{\rm TBD}]$
+layer-2 calls:
+\begin{equation}
+  \label{eq:time-online}
+  C_{\mathrm{online}}
+  \;\approx\;
+  (T + T_2) \cdot 5 \cdot B \cdot N \cdot \frac{\mathcal{E}}{r}
+  \;\approx\;
+  300 \cdot 5 \cdot 32 \cdot 2^{14} \cdot \frac{\mathcal{E}}{7}
+  \;\approx\; 2^{29} \cdot \mathcal{E},
+\end{equation}
+where we used $r = 7$ and approximated $T + T_2 \approx 2T$.
+
+\paragraph{Verifier phase.}
+
+The verifier exhausts $|\mathcal{N}|^2 \approx 137^2 \approx 2^{14.1}$
+two-round-peel candidates over $N_{\mathrm{ver}} = 128 = 2^7$ pairs:
+\begin{equation}
+  \label{eq:time-verify}
+  C_{\mathrm{ver}} \;\approx\; 2^{14.1} \cdot 2 \cdot 2^7 \cdot \frac{\mathcal{E}}{7}
+  \;\approx\; 2^{20} \cdot \mathcal{E}.
+\end{equation}
+
+\paragraph{Offline phase.}
+
+The BCT profile computation (Algorithm~\ref{alg:pself}) runs in
+$O(16 \cdot 16^2 \cdot 2^{16})$ floating-point operations, roughly
+$2^{28}$ scalar operations, and is done once before any attack trial.
+Normalised: $\approx 2^{28} / (r \cdot C_\mathrm{mult}) \mathcal{E}$,
+where $C_\mathrm{mult}$ is the number of scalar multiplications per
+round, which is negligible relative to the online cost.
+
+\paragraph{Total time complexity.}
+
+\begin{equation}
+  \label{eq:time-total}
+  \mathcal{T} \;\approx\; C_{\mathrm{online}} + C_{\mathrm{ver}}
+  \;\approx\; 2^{29} \cdot \mathcal{E}.
+\end{equation}
+
+The exact constant depends on the ratio of decryption-round throughput to
+floating-point throughput on the target platform; an experimentally
+calibrated value is provided in Section~\ref{sec:experiments}.
+
+\paragraph{Advantage.}
+
+The 64-bit master key of \speck{} spans a $2^{64}$ search space.  After
+recovering the two last-round subkeys $(k_{r-1}, k_{r-2})$, the remaining
+master-key bits can be determined from the key schedule in negligible time.
+The advantage over brute force is approximately
+\begin{equation}
+  \label{eq:advantage}
+  \mathrm{Adv}
+  \;=\; \log_2(2^{64}) - \log_2(\mathcal{T} / \mathcal{E})
+  \;\approx\; 64 - 29 \;=\; 35 \text{ bits}.
+\end{equation}
+
+% ── 6.3 Memory Complexity ─────────────────────────────────────────────────────
+\subsection{Memory Complexity}
+
+Table~\ref{tab:memory} itemises the memory footprint of the attack.
+The dominant term is the storage of the ciphertext structures; the
+WKP arrays and the transfer-matrix intermediate state are small by
+comparison.  In total the attack requires approximately $\mathbf{[\text{TBD}]}$
+MB of RAM, compared to several gigabytes for the neural-network-based
+attack of Gohr~\cite{Goh19} (which requires storing and evaluating a
+deep residual network).
+
+\begin{table}[h]
+\centering
+\caption{Memory requirements for the 7-round attack}
+\label{tab:memory}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Size} & \textbf{Notes} \\
+\midrule
+Ciphertext structures ($\mathrm{cts}$)
+  & $4 \times S \times N \times 2\,\mathrm{B}$
+  & $= 4 \times 32 \times 2^{14} \times 2 = 2^{22}\,\mathrm{B} \approx 4\,\mathrm{MB}$ \\
+WKP arrays ($M_{\mathrm{BCT}},\,S_{\mathrm{BCT}}$)
+  & $2 \times 2^{16} \times 8\,\mathrm{B}$
+  & $= 2^{20}\,\mathrm{B} \approx 1\,\mathrm{MB}$ \\
+Transfer-matrix state ($L$)
+  & $2^{16} \times 16 \times 8\,\mathrm{B}$
+  & $= 2^{23}\,\mathrm{B} \approx 8\,\mathrm{MB}$ (offline only) \\
+Beam candidates + temporaries
+  & $O(B \cdot N) = O(2^{19}\,\mathrm{B})$
+  & $\approx 0.5\,\mathrm{MB}$ \\
+\midrule
+\textbf{Total (online)}
+  & $\mathbf{[\text{TBD}]\,\text{MB}}$ & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── 6.4 Comparison ────────────────────────────────────────────────────────────
+\subsection{Comparison with Neural-Network-Based Attacks}
+
+Table~\ref{tab:comparison} places our attack in the context of existing
+results on round-reduced \speck{}.
+Following Bao et al.~\cite{BLY23}, complexity is expressed in units of
+$r$-round \speck{} encryptions; the Advantage column gives
+$\log_2(\text{key space}) - \log_2(\text{time complexity})$.
+
+\begin{table}[h]
+\centering
+\caption{Comparison of key-recovery attacks on \speck{}
+         (single-key setting)}
+\label{tab:comparison}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llllllll}
+\toprule
+\textbf{Rounds} & \textbf{Type} & \textbf{Config.}
+  & \textbf{Time} & \textbf{Data} & \textbf{Succ.}
+  & \textbf{Adv.} & \textbf{Ref.} \\
+\midrule
+7  & Trunc.-BCT (ours) & $6+1+1$
+   & $2^{29}$  & $2^{20}$ & $[\text{TBD}]$
+   & $\approx 35$ & This work \\
+11 & ND (Gohr)         & $1+3+7+1$
+   & $2^{50.2}$ & $2^{29}$ & $82\%$
+   & $13.8$ & \cite{Goh19} \\
+11 & ND (improved)     & $1+3+8+1$
+   & $2^{44.4}$ & $2^{27}$ & $21\%$
+   & $18.6$ & \cite{BLY23} \\
+\midrule
+\multicolumn{8}{l}{\footnotesize Config.\ notation: (CD-extend rounds) + (ND/distinguisher rounds) + (peel rounds)} \\
+\multicolumn{8}{l}{\footnotesize Succ.\ = success rate; Adv.\ = $\log_2$ advantage over exhaustive search.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our 7-round result is by design less aggressive in round coverage than
+the 11-round ND attacks of Gohr and Bao et al., as the goal here is
+theoretical interpretability rather than maximal round coverage.  Within
+the 7-round parameter regime, however, the truncated-BCT attack is
+\emph{entirely algebraic}: there is no neural network to train, no
+GPU requirement, and no empirically sampled WKP.  The offline
+BCT-profile computation (Algorithm~\ref{alg:pself}) runs in
+$O(2^{28})$ scalar operations once and can be cached.
+
+The key structural difference from ND-based attacks, highlighted by the
+profiling data of Bao et al.~\cite{BLY23} (their Table~16), is that
+$84\%$ of their attack time is consumed by GPU neural-network evaluation.
+In our framework this cost is absent; the dominant runtime contributor
+is the \texttt{bayesian\_rank\_kr} WKP residual computation
+($O(B \cdot 2^{14})$ per beam step), which is a pure CPU
+floating-point operation and runs at full memory-bandwidth speed.
+
+\begin{remark}
+  The time estimate~\eqref{eq:time-total} is a theoretical upper bound;
+  early termination (whenever $v^*$ exceeds $\tau_2$) and the
+  relatively small $S = 32$ structure count in practice reduce the
+  actual running time.  Section~\ref{sec:experiments} reports measured
+  wall-clock times calibrated against the $2^{26.8}$ rounds/second
+  throughput of a single CPU core on the experimental machine.
+\end{remark}
 
 \section{Experiments}
 \label{sec:experiments}
