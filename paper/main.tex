@@ -4,7 +4,7 @@
 \documentclass[runningheads]{llncs}
 
 \usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb,amsthm}
+\usepackage{amsmath,amssymb}
 \usepackage{mathtools}          % \coloneqq, etc.
 \usepackage{booktabs}           % professional tables
 \usepackage{xcolor}
@@ -15,8 +15,9 @@
   citecolor=black,
   urlcolor=black
 }
-\usepackage{microtype}          % better typography
+\usepackage[protrusion=true,expansion=false]{microtype} % typography (no expansion)
 \usepackage{graphicx}
+\usepackage{float}              % [H] placement
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
@@ -34,13 +35,8 @@
 \newcommand{\ror}[2]{(#1 \ggg #2)}
 \newcommand{\rol}[2]{(#1 \lll #2)}
 
-% ── Theorem-like environments ────────────────────────────────
-\newtheorem{definition}{Definition}
-\newtheorem{theorem}{Theorem}
-\newtheorem{proposition}{Proposition}
-\newtheorem{lemma}{Lemma}
-\newtheorem{corollary}{Corollary}
-\newtheorem{remark}{Remark}
+% llncs.cls already defines: definition, theorem, proposition,
+% lemma, corollary, remark — no \newtheorem needed.
 
 % ============================================================
 \begin{document}
@@ -755,7 +751,8 @@ wrong-key offset $g$.  In particular:
 \end{itemize}
 The variation of $\pself(g)$ across $g$ is the signal that makes Bayesian
 beam search effective: only the correct key offset $g = 0$ saturates
-$\pself = 1$.
+$\pself = 1$.  Figure~\ref{fig:wkp} (Section~\ref{sec:experiments})
+shows the computed profile for our target class $\mathcal{T}$.
 
 \begin{proposition}
   \label{prop:pself0}
@@ -1306,7 +1303,7 @@ exhaustively explores a Hamming-$\le 2$ neighbourhood of the best
 candidate pair; and (3) an optional recursion to recover further
 subkeys.
 
-\begin{algorithm}[t]
+\begin{algorithm}[H]
 \caption{Truncated-BCT Bayesian Key Recovery on $r$-Round \speck{}}
 \label{alg:attack}
 \begin{algorithmic}[1]
@@ -1738,15 +1735,18 @@ and illustrates the sharp spike at $g = 0$ that drives the attack.
 
 \begin{figure}[h]
 \centering
-% Include WKP figure when available
-% \includegraphics[width=\textwidth]{wkp_bct_trunc_0109}
+\includegraphics[width=\textwidth]{wkp_bct_trunc_0109}
 \caption{BCT-algebraic wrong-key profile
 $M_{\mathrm{BCT}}[g] = P_{\mathrm{RAND}} + p_t \cdot \pself(g)$
-for all $2^{16}$ key offsets $g$.  The correct key ($g=0$) produces a
-spike at $M[0] = 5.49 \times 10^{-4}$; the vast majority of wrong-key
-offsets give $M[g] \approx P_{\mathrm{RAND}} = 2^{-14}$.
-The horizontal lines mark $M[0]$ (blue), $P_{\mathrm{RAND}}$ (dashed
-red), and the mean $\overline{M_{\mathrm{BCT}}}$ (grey).}
+for all $2^{16}$ key offsets $g$ (truncated class $\mathcal{T}$:
+$\alpha = \mathtt{0x0109}$, $\beta = \mathtt{0x8003}$,
+$p_t = 2^{-11}$, $P_{\mathrm{RAND}} = 2^{-14}$).
+\textit{Top}: scatter plot; \textit{bottom}: line plot with zoom.
+The correct key ($g=0$, blue line) produces a unique spike at
+$M[0] = 5.49 \times 10^{-4} \approx p_t$; the vast majority of
+wrong-key offsets give $M[g] \approx P_{\mathrm{RAND}} = 2^{-14}$
+(dashed red).  The grey dashed line marks the mean
+$\overline{M_{\mathrm{BCT}}} \approx 6.29 \times 10^{-5}$.}
 \label{fig:wkp}
 \end{figure}
 
