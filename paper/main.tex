@@ -1047,11 +1047,391 @@ and $b_i$ is fixed to $\beta_i$ at fixed positions.
 
 \section{Transfer-Matrix Algorithm}
 \label{sec:algorithm}
-[To be written.]
 
+Section~\ref{sec:bct} showed that $\pself(g)$ is a product of effective
+transfer matrices over the 16 bit positions of a 16-bit word
+(Definition~\ref{def:pself}).  We now describe the concrete algorithm
+that computes $\pself(g)$ for \emph{all} $2^{16}$ values of $g$
+simultaneously in a single pass, running in time $O(16 \cdot 16^2 \cdot
+2^{16})$ and negligible memory.
+
+% ── 4.1 Base matrices ───────────────────────────────────────────────────────
+\subsection{Base Transition Matrices}
+
+There are $2 \times 2 \times 2 = 8$ distinct combinations of
+$(a_i, b_i, g_i) \in \{0,1\}^3$, yielding 8 base transition
+matrices $M_{a,b,g} \in \mathbb{R}^{16 \times 16}$.
+Each entry $M_{a,b,g}[\mathrm{Out}][\mathrm{In}]$ is computed by
+averaging over the two plaintext bits $(x_i, y_i) \in \{0,1\}^2$
+subject to the carry parity constraint $c_1 \xor c_2 \xor c_3
+\xor c_4 = 0$ on the input state $\mathrm{In}$:
+\begin{align}
+  \label{eq:M8-def}
+  M_{a,b,g}[\mathrm{Out}][\mathrm{In}]
+  &=
+  \frac{1}{4}
+  \sum_{x,y \in \{0,1\}}
+  \mathbf{1}\!\left[
+    c_1 \xor c_2 \xor c_3 \xor c_4 = 0
+  \right]
+  \cdot
+  \mathbf{1}\!\left[
+    \mathrm{Out} = \bigl(
+      \mathrm{carry}(x,y,c_1),\;
+      c_2',\;
+      \mathrm{carry}(x{\xor}a,\,y{\xor}b,\,c_3),\;
+      c_4'
+    \bigr)
+  \right],
+\end{align}
+where $(c_1, c_2, c_3, c_4) = \mathrm{In}$, and the secondary carries are
+\begin{align*}
+  c_2' &= \mathrm{carry}(x \xor y \xor g \xor c_1,\;\; y \xor 1,\;\; c_2), \\
+  c_4' &= \mathrm{carry}(x \xor a \xor y \xor b \xor g \xor c_3,\;\;
+                         y \xor b \xor 1 \xor a,\;\; c_4),
+\end{align*}
+with $\mathrm{carry}(u,v,w) = (u \land v) \xor (u \land w) \xor (v \land w)$
+as defined in~\eqref{eq:carry}.  All 8 matrices $M_{a,b,g}$ are
+precomputed once before the main loop.
+
+% ── 4.2 Algorithm ───────────────────────────────────────────────────────────
+\subsection{Computing $\pself(g)$ for All $g$ Simultaneously}
+
+\begin{algorithm}[t]
+\caption{Compute $\pself(g)$ for all $g \in \{0,1\}^{16}$}
+\label{alg:pself}
+\begin{algorithmic}[1]
+\Require Truncated class parameters $(\alpha, \mu_\alpha, \beta, \mu_\beta)$
+\Ensure Array $[\pself(g)]_{g=0}^{2^{16}-1}$
+
+\State \textbf{Precompute} base matrices $M_{a,b,g} \in \mathbb{R}^{16 \times 16}$
+       for $(a,b,g) \in \{0,1\}^3$ via~\eqref{eq:M8-def}
+
+\State Initialise state matrix
+       $L \in \mathbb{R}^{2^{16} \times 16}$ with $L[g, j] = \mathbf{1}[j = 5]$
+       for all $g$ \Comment{carry state $e_5$: $(c_1,c_2,c_3,c_4)=(1,0,1,0)$}
+
+\For{$i = 0$ \textbf{to} $15$}
+  \State $a_{\mathrm{fix}} \gets (\alpha \ggg 7)_i$,\quad
+         $\mathrm{fa} \gets (\mu_\alpha \ggg 7)_i$ \Comment{bit $i$ of rotated class}
+  \State $b_{\mathrm{fix}} \gets \beta_i$,\quad
+         $\mathrm{fb} \gets (\mu_\beta)_i$
+
+  \For{$\hat{g} \in \{0, 1\}$} \Comment{one effective matrix per key-bit value}
+    \State $M^{\mathrm{eff}}_i[\hat{g}] \gets \mathbf{0}_{16 \times 16}$
+    \For{each free-bit combination $(a_i, b_i)$ (resp.\ fixed values)}
+      \State $M^{\mathrm{eff}}_i[\hat{g}] \mathrel{+}=
+             \tfrac{1}{2^{\mathrm{fa}+\mathrm{fb}}} \cdot M_{a_i, b_i, \hat{g}}$
+    \EndFor
+  \EndFor
+
+  \State $g_{\mathrm{bit}} \gets \lfloor g / 2^i \rfloor \bmod 2$
+         \quad for each $g \in [0, 2^{16})$
+
+  \State $L[g \colon g_{\mathrm{bit}}=0] \mathrel{\gets}
+         L[g \colon g_{\mathrm{bit}}=0]\cdot (M^{\mathrm{eff}}_i[0])^\top$ \Comment{row $\times$ matrix}
+  \State $L[g \colon g_{\mathrm{bit}}=1] \mathrel{\gets}
+         L[g \colon g_{\mathrm{bit}}=1]\cdot (M^{\mathrm{eff}}_i[1])^\top$
+\EndFor
+
+\Return $[\textstyle\sum_{j=0}^{15} L[g,j]]_{g=0}^{2^{16}-1}$
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm~\ref{alg:pself} processes all $2^{16}$ values of $g$ in
+parallel by maintaining the state distribution $L[g, \cdot]$ as a
+$2^{16} \times 16$ matrix.  At each bit position $i$, the effective
+matrix $M^{\mathrm{eff}}_i[\hat{g}]$ for each key-bit value
+$\hat{g} \in \{0,1\}$ is formed by averaging $M_{a_i, b_i, \hat{g}}$
+over the at most four combinations of free bits, then all rows of $L$
+are multiplied by the matrix corresponding to the $i$-th bit of their
+respective $g$.  After 16 such steps, each row of $L$ sums to
+$\pself(g)$ by the product formula~\eqref{eq:pself}.
+
+\subsection{Complexity}
+
+\begin{proposition}
+  \label{prop:complexity}
+  Algorithm~\ref{alg:pself} computes $\pself(g)$ for all $g \in
+  \{0,1\}^{16}$ in time $O(n \cdot 4 \cdot 2^n \cdot n^2)$ using
+  $O(2^n \cdot n)$ memory, where $n = 16$.  For $n = 16$ this amounts
+  to approximately $2^{28}$ floating-point operations and $2^{20}$
+  memory words.
+\end{proposition}
+
+In practice the algorithm runs in under 0.3 seconds on a single CPU
+core (Python/NumPy implementation), owing to the fully vectorised
+matrix-multiply over the $2^{16}$ row dimension.
+
+% ── 4.3 Instantiation ───────────────────────────────────────────────────────
+\subsection{Instantiation and Profile Shape}
+\label{subsec:profile}
+
+Applying Algorithm~\ref{alg:pself} to our truncated class
+(Section~\ref{subsec:trunc}) yields the wrong-key profile
+\[
+  M_{\mathrm{BCT}}[g] = p_{\mathrm{rand}} + p_t \cdot \pself(g),
+  \qquad
+  S_{\mathrm{BCT}}[g] = \tfrac{1}{\sqrt{M_{\mathrm{BCT}}[g]
+                         \cdot (1 - M_{\mathrm{BCT}}[g])}},
+\]
+with $p_t = 2^{-11}$ and $p_{\mathrm{rand}} = 2^{-14}$.  Numerically:
+$M_{\mathrm{BCT}}[0] \approx 2^{-11}$ (correct key), while
+$M_{\mathrm{BCT}}[g] \approx p_{\mathrm{rand}} = 2^{-14}$ for
+the overwhelming majority of wrong-key offsets $g$.  The profile
+exhibits a sharply peaked spike at $g = 0$, with a smooth but steep
+decay; this shape is the algebraic signature that the beam search
+exploits.
+
+% ============================================================
 \section{Reconstructed Key-Recovery Attack}
 \label{sec:attack}
-[To be written.]
+% ============================================================
+
+We now describe the full key-recovery attack instantiated with the
+truncated differential distinguisher (Section~\ref{subsec:trunc})
+and the algebraic WKP derived in Sections~\ref{sec:bct}
+and~\ref{sec:algorithm}.
+
+% ── 5.1 Sensitive-bit detection ─────────────────────────────────────────────
+\subsection{Truncated Differential Distinguisher Design: Sensitive-Bit Detection}
+\label{subsec:sensitive}
+
+The truncated class $\mathcal{T}$ must be chosen so that:
+(i) $p_t \gg p_{\mathrm{rand}}$ (the truncated probability significantly
+exceeds the random baseline), and (ii) $|\mathcal{T}|$ is large enough
+to give a manageable data complexity.
+We select the class by a \emph{sensitive-bit experiment} on $(r-1)$-round
+\speck{}.
+
+\paragraph{Procedure.}
+Fix the target input difference
+$\Delta_{\mathrm{in}} = (\mathtt{0x0040}, \mathtt{0x0000})$, which is
+known to have substantial differential probability at reduced rounds of
+\speck{}.
+Generate $N_{\exp} = 2^{22}$ random plaintext pairs $(P_k, P_k \xor
+\Delta_{\mathrm{in}})$ under uniformly random independent keys, encrypt
+each pair through $r - 1$ rounds, and collect output differences
+$\Delta^{(k)}_{\mathrm{out}} = (\Delta^{(k)}_L, \Delta^{(k)}_R)$.
+For each bit position $j \in \{0, \ldots, 15\}$ of each word $w \in
+\{L, R\}$, compute the \emph{empirical bias}
+\begin{equation}
+  \label{eq:bias}
+  \hat{\beta}_{w,j}
+  \;=\;
+  \left\lvert\,
+    \frac{1}{N_{\exp}} \sum_{k=1}^{N_{\exp}} \Delta^{(k)}_{w,j}
+    \;-\; \tfrac{1}{2}
+  \right\rvert,
+\end{equation}
+where $\Delta^{(k)}_{w,j}$ denotes bit $j$ of word $w$ of the $k$-th
+output difference.  A bit is declared \emph{sensitive} if
+$\hat{\beta}_{w,j} > \theta$ for a chosen threshold $\theta > 0$;
+otherwise it is \emph{free}.
+
+\paragraph{Mask construction.}
+Set $\mu_\alpha$ (resp.\ $\mu_\beta$) to have a $1$ at bit $j$ if and
+only if bit $j$ of the left (resp.\ right) output word is free.  Set
+the representative values $\alpha, \beta$ to the \emph{modal} (most
+frequent) output difference in the sensitive positions.  The resulting
+masks for our instantiation are:
+\begin{equation}
+  \label{eq:masks}
+  \alpha = \mathtt{0x0109},\quad
+  \mu_\alpha = \mathtt{0x6A74},\quad
+  \beta = \mathtt{0x8003},\quad
+  \mu_\beta = \mathtt{0x6AFC},
+\end{equation}
+giving $n_{\mathrm{free}} = 18$ free bits and $n_{\mathrm{fixed}} = 14$
+sensitive bits.  The measured truncated differential probability is
+$p_t = 2^{-11}$, providing an SNR of $p_t / p_{\mathrm{rand}} = 2^3 = 8$
+over the random baseline $p_{\mathrm{rand}} = 2^{-14}$.
+
+% ── 5.2 Data generation ─────────────────────────────────────────────────────
+\subsection{Data Generation}
+\label{subsec:datagen}
+
+The attack requires $S$ independent \emph{structures}, each comprising
+$N$ ciphertext pairs $(C^{(s,i)}, C'^{(s,i)})$ for $s \in [S]$,
+$i \in [N]$.  Within each structure, pairs share the same unknown key
+$k$ but use independently random base plaintexts.  Pairs are
+generated as follows.
+
+\begin{enumerate}
+  \item Draw $N$ random plaintexts $P^{(i)} \in \mathbb{F}_2^{32}$.
+  \item Apply a fixed-key one-round decryption (with dummy key $0$) to
+    both $P^{(i)}$ and $P^{(i)} \xor \Delta_{\mathrm{in}}$ to obtain
+    extended plaintexts
+    $\hat{P}^{(i)} = F_0^{-1}(P^{(i)})$ and
+    $\hat{P}'^{(i)} = F_0^{-1}(P^{(i)} \xor \Delta_{\mathrm{in}})$;
+    this prepends an additional unkeyed round so that the distinguisher
+    operates over the correct (one-extended) internal difference.
+  \item Encrypt: $C^{(s,i)} = E_k^{(r)}(\hat{P}^{(i)})$,\;
+    $C'^{(s,i)} = E_k^{(r)}(\hat{P}'^{(i)})$.
+\end{enumerate}
+
+Total data: $S \cdot N$ ciphertext pairs per trial.  In our experiments
+we use $S = 32$ structures and $N = 2^{14}$ pairs per structure,
+totalling $2^{19}$ ciphertext pairs per trial.
+
+% ── 5.3 Full attack algorithm ────────────────────────────────────────────────
+\subsection{Two-Layer Bayesian Beam Search with UCB Structure Selection}
+\label{subsec:attack-alg}
+
+The full attack is given in Algorithm~\ref{alg:attack}.  It consists
+of three phases: (1) a UCB-guided outer loop that selects structures
+and runs a two-layer beam search to simultaneously recover the last
+two round subkeys $k_{r-1}$ and $k_{r-2}$; (2) a verifier that
+exhaustively explores a Hamming-$\le 2$ neighbourhood of the best
+candidate pair; and (3) an optional recursion to recover further
+subkeys.
+
+\begin{algorithm}[t]
+\caption{Truncated-BCT Bayesian Key Recovery on $r$-Round \speck{}}
+\label{alg:attack}
+\begin{algorithmic}[1]
+\Require Ciphertext structures $\{(C^{(s,i)}, C'^{(s,i)})\}$,
+         WKP arrays $M_{\mathrm{BCT}}$, $S_{\mathrm{BCT}}$,
+         beam width $B=32$, iterations $T$,
+         thresholds $\tau_1, \tau_2$, UCB constant $\alpha$
+\Ensure Subkey pair $(\hat{k}_{r-1}, \hat{k}_{r-2})$
+
+\State $v^* \gets -\infty$;\; $(\hat{k}_1, \hat{k}_2) \gets (0, 0)$;\;
+       $\ell_{\mathrm{best}}[s] \gets -\infty$,\;
+       $\nu[s] \gets \varepsilon$ \quad for all $s \in [S]$
+
+\For{$j = 1$ \textbf{to} $T$} \Comment{UCB structure selection}
+
+  \If{$v^* > \tau_2$}
+    \State \textbf{break} \quad (proceed to verifier)
+  \EndIf
+
+  \State $s^* \gets \arg\max_{s}\!\left[\ell_{\mathrm{best}}[s]
+         + \alpha\sqrt{\tfrac{\log_2(j)}{\nu[s]}}\right]$;\;
+         $\nu[s^*] \mathrel{+}= 1$
+
+  \medskip
+  \State \textbf{// --- Layer 1: recover $k_{r-1}$ ---}
+  \State $\mathcal{K}_1 \gets$ random subset of $B$ values in $\{0,1\}^{14}$
+  \For{$\ell = 1$ \textbf{to} $5$} \Comment{inner beam iterations}
+    \For{each $k' \in \mathcal{K}_1$}
+      \State $\widetilde\Delta^{(i)}(k') \gets
+             F_{k'}^{-1}(C^{(s^*,i)}) \xor F_{k'}^{-1}(C'^{(s^*,i)})$
+             for $i \in [N]$
+      \State $h(k') \gets \#\{i : \widetilde\Delta^{(i)}(k') \in \mathcal{T}\}$
+      \State $\hat{r}(k') \gets h(k') / N$;\quad
+             $v(k') \gets \log_2\!\bigl(h(k') \cdot D\bigr)$
+    \EndFor
+    \State Score each $b \in \{0,1\}^{14}$:
+    $\displaystyle\sigma(b) \gets
+     \left\lVert\bigl[\hat{r}(k'_j) - M_{\mathrm{BCT}}[b \xor k'_j]\bigr]
+     \cdot S_{\mathrm{BCT}}[b \xor k'_j]\right\rVert_2$
+    \State $\mathcal{K}_1 \gets$ top-$B$ candidates by $-\sigma(\cdot)$
+           with random 2-bit high extension
+  \EndFor
+  \State Update $\ell_{\mathrm{best}}[s^*] \gets \max(\ell_{\mathrm{best}}[s^*],\,
+         \max_{k'} v(k'))$
+
+  \medskip
+  \State \textbf{// --- Layer 2: recover $k_{r-2}$ given $k_{r-1}$ ---}
+  \If{$\max_{k'} v(k') > \tau_1$}
+    \For{each $k_1 \in \mathcal{K}_1$ with $v(k_1) > \tau_1$}
+      \State Peel one more round:
+             $\hat{C}^{(s^*,i)} \gets F_{k_1}^{-1}(C^{(s^*,i)})$,\;
+             $\hat{C}'^{(s^*,i)} \gets F_{k_1}^{-1}(C'^{(s^*,i)})$
+      \State Run Layer-1 beam search on $\{(\hat{C}, \hat{C}')\}$
+             with $B$ candidates for $k_{r-2}$, obtaining
+             $(\mathcal{K}_2, v_2)$
+      \If{$\max v_2 > v^*$}
+        \State $v^* \gets \max v_2$;\;
+               $(\hat{k}_1, \hat{k}_2) \gets
+               (k_1,\, \arg\max_{k' \in \mathcal{K}_2} v_2(k'))$
+      \EndIf
+    \EndFor
+  \EndIf
+
+\EndFor
+
+\medskip
+\State \textbf{// --- Verifier: Hamming-$\le 2$ neighbourhood refinement ---}
+\State $\mathcal{N} \gets \{w \in \{0,1\}^{16} : \mathrm{wt}(w) \le 2\}$
+       \quad ($|\mathcal{N}| = 137$)
+\Repeat
+  \State $(k_1^*, k_2^*) \gets \arg\max_{(e_1, e_2) \in \mathcal{N}^2}
+         \log_2\!\bigl(\#\{i : \widetilde\Delta^{(i)}(\hat{k}_1 \xor e_1,
+         \hat{k}_2 \xor e_2) \in \mathcal{T}\} \cdot D\bigr)$
+  \State $(\hat{k}_1, \hat{k}_2) \gets (\hat{k}_1 \xor k_1^*,\;
+         \hat{k}_2 \xor k_2^*)$
+\Until{no improvement}
+
+\Return $(\hat{k}_1, \hat{k}_2)$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Scoring details.}
+Within the beam, each candidate subkey $k'$ is scored on two complementary
+scales.  The \emph{volume score} $v(k') = \log_2(h(k') \cdot D)$, where
+$D = 1 / (p_t \cdot 2^{-5}) = 2^{16}$, compares the raw hit count to
+the expected correct-key count.  Under the correct key offset $g = 0$,
+\[
+  \mathbb{E}[v \mid g = 0] \;=\; \log_2(N \cdot p_t \cdot D) \;=\;
+  \log_2(2^{14} \cdot 2^{-11} \cdot 2^{16}) \;=\; 19,
+\]
+while under noise, $\mathbb{E}[v \mid g \ne 0] \approx 16$.  The
+thresholds $\tau_1 = 18$ and $\tau_2 = 22$ bracket these values,
+triggering layer-2 entry and early exit respectively.  The
+\emph{Bayesian residual score} $\sigma(b)$ (line~14) additionally
+ranks the pool using the full WKP shape, selecting candidates whose
+empirical hit-rate profile best matches the algebraic prediction
+$M_{\mathrm{BCT}}$.
+
+\paragraph{UCB exploration.}
+The UCB priority (line~6) assigns higher priority to structures with
+high peak scores and to structures that have been visited infrequently.
+The constant $\alpha = \sqrt{N}$ controls the exploration-exploitation
+trade-off, following the multi-armed bandit analysis of~\cite{ACF02}.
+
+\paragraph{Verifier.}
+The verifier loop (lines~25--28) exhaustively scores all $137^2 \approx
+1.9 \times 10^4$ candidate pairs in the Hamming-$\le 2$ neighbourhood
+of the current best guess, using a fixed sample of $N_{\mathrm{ver}} = 128$
+pairs from the best-scoring structure.  Each candidate requires only
+two one-round decryptions and a truncated hit check, so the
+neighbourhood scan costs $O(137^2 \cdot N_{\mathrm{ver}})$ operations.
+
+\subsection{Attack Parameters}
+\label{subsec:params}
+
+Table~\ref{tab:params} summarises the attack parameters for the
+7-round instance.
+
+\begin{table}[h]
+\centering
+\caption{Attack parameters for 7-round \speck{}}
+\label{tab:params}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Meaning} \\
+\midrule
+Input difference $\Delta_{\mathrm{in}}$ & $(\mathtt{0x0040}, \mathtt{0x0000})$ &
+  6-round input difference \\
+Trunc.\ class $(\alpha, \mu_\alpha)$ & $(\mathtt{0x0109}, \mathtt{0x6A74})$ &
+  left-word representative / free mask \\
+Trunc.\ class $(\beta, \mu_\beta)$   & $(\mathtt{0x8003}, \mathtt{0x6AFC})$ &
+  right-word representative / free mask \\
+$p_t$ & $2^{-11}$ & truncated differential probability \\
+$p_{\mathrm{rand}}$ & $2^{-14}$ & random baseline probability \\
+$D$ & $2^{16}$ & score normalisation $= 1/(p_t \cdot 2^{-5})$ \\
+$N$ & $2^{14}$ & pairs per structure \\
+$S$ & $32$ & structures \\
+$B$ & $32$ & beam width \\
+$T$ & $300$ & UCB iterations \\
+$\tau_1$ & $18$ & layer-2 trigger threshold \\
+$\tau_2$ & $22$ & verifier / early-exit threshold \\
+$N_{\mathrm{ver}}$ & $128$ & verifier pair budget \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Data Complexity Analysis}
 \label{sec:complexity}
