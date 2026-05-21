@@ -1654,9 +1654,13 @@ $\log_2(\text{key space}) - \log_2(\text{time complexity})$.
 11 & ND (improved)     & $1+3+8+1$
    & $2^{44.4}$ & $2^{27}$ & $21\%$
    & $18.6$ & \cite{BLY23} \\
+14 & Trunc.-BCT (proj.) & $1+9+3+1$
+   & $2^{33.6}$ & $2^{\rho+9}$ & ---
+   & $\approx 30$ & This work$^\dagger$ \\
 \midrule
-\multicolumn{8}{l}{\footnotesize Config.\ notation: (CD-extend rounds) + (ND/distinguisher rounds) + (peel rounds)} \\
+\multicolumn{8}{l}{\footnotesize Config.\ notation: (backward ext.) + (core rounds) + (beam layers) + (verifier rounds)} \\
 \multicolumn{8}{l}{\footnotesize Succ.\ = success rate; Adv.\ = $\log_2$ advantage over exhaustive search.} \\
+\multicolumn{8}{l}{\footnotesize $^\dagger$~14-round row is theoretical; requires a 9-round truncated differential with $p_t^{(9)}>2^{-14}$ (open problem).} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1686,6 +1690,121 @@ floating-point operation and runs at full memory-bandwidth speed.
   wall-clock times calibrated against the $2^{26.8}$ rounds/second
   throughput of a single CPU core on the experimental machine.
 \end{remark}
+
+% ── 6.5 Extension to 14-Round Speck32/64 ──────────────────────────────────────
+\subsection{Theoretical Extension to 14-Round \speck{}}
+\label{subsec:14round}
+
+We derive the theoretical complexity of a 14-round key-recovery
+attack obtained by extending the framework from two beam-search layers
+to three, using the \emph{1+9+3+1} round decomposition:
+\begin{itemize}
+  \item \textbf{1 backward extension}: apply one round of
+    \speck{} decryption (with the unknown subkey set to zero) to each
+    plaintext before the encrypt-and-distinguish phase, effectively
+    extending the distinguisher depth by one round for free.
+  \item \textbf{9 core rounds}: encrypt with the full 14-round
+    oracle; the truncated-BCT score is computed from the ciphertext
+    pairs after this step.
+  \item \textbf{3 UCB beam-search layers}: recover subkeys
+    $k_{13},k_{12},k_{11}$ by three sequential beam-search layers,
+    each peeling one round off the top of the ciphertext.
+  \item \textbf{1 verifier round}: confirm $(k_{11},k_{12},k_{13})$
+    and recover $k_{10}$ via a joint Hamming-$\le 2$ neighbourhood
+    search.
+\end{itemize}
+Total round coverage: $1+9+3+1 = 14$.
+
+The BCT offline phase (Algorithm~\ref{alg:pself}) is
+\emph{round-agnostic}: it depends only on the truncated class
+$\mathcal{T}$ and is unchanged when the round count varies.
+
+\paragraph{Prerequisite: 9-round truncated differential.}
+
+Let $\mathcal{T}$ be a truncated class with $n_\mathrm{fixed}$
+fixed output-difference bits (so $p_\mathrm{rand} = 2^{-n_\mathrm{fixed}}$),
+and let
+\[
+  p_t^{(9)} \;=\; 2^{-\rho}, \qquad 0 < \rho < n_\mathrm{fixed},
+\]
+be the 9-round truncated differential probability over the core rounds.
+The attack is viable iff $p_t^{(9)} > p_\mathrm{rand}$, i.e.\
+$\rho < n_\mathrm{fixed}$.  The SNR at the layer-1 beam step is
+\[
+  \mathrm{SNR} \;=\;
+  \frac{p_t^{(9)}}{p_\mathrm{rand}} \;=\; 2^{n_\mathrm{fixed} - \rho}.
+\]
+
+\paragraph{Data complexity.}
+
+Each structure contributes $N$ ciphertext pairs; the correct subkey at
+layer~1 accumulates $\mathbb{E}[h \mid g{=}0] = N \cdot p_t^{(9)} = N
+\cdot 2^{-\rho}$ hits on average.  Setting $N = 2^{\rho+3}$ gives
+$\mathbb{E}[h] = 8$, matching the comfortable margin of the 7-round
+attack.  With $S = 32$ structures the total data requirement is
+\begin{equation}
+  \label{eq:data14}
+  \mathcal{D}_{14} \;=\; 2SN \;=\; 2^{\rho+9} \text{ chosen plaintexts.}
+\end{equation}
+
+\paragraph{Online time: three-layer beam search.}
+
+Layer 2 is triggered whenever layer 1 succeeds; layer 3 whenever layer 2
+succeeds.  In the conservative worst case all three are triggered at every
+UCB iteration ($T_1=T_2=T_3=T$):
+\begin{equation}
+  \label{eq:time14-online}
+  C_\mathrm{online}^{(14)}
+  \;\approx\;
+  3T \cdot 5BN \cdot \tfrac{\mathcal{E}}{14}
+  \;\approx\;
+  3 \cdot 300 \cdot 5 \cdot 32 \cdot 2^{\rho+3} \cdot \tfrac{\mathcal{E}}{14}
+  \;\approx\;
+  2^{\rho+19.2} \cdot \mathcal{E}.
+\end{equation}
+
+\paragraph{Verifier time.}
+
+The verifier jointly searches the Hamming-$\le 2$ neighbourhood of the
+beam output for all four last-round subkeys
+$(k_{13},k_{12},k_{11},k_{10})$.
+For a 16-bit word, $|\mathcal{N}_{\le2}| = 1+16+\binom{16}{2} = 137$,
+so the candidate count is $137^4 \approx 2^{28.4}$.  Each candidate
+requires four-round decryption over $N_\mathrm{ver}=128$ pairs:
+\begin{equation}
+  \label{eq:time14-verify}
+  C_\mathrm{ver}^{(14)}
+  \;\approx\;
+  2^{28.4} \cdot 2^7 \cdot \tfrac{4}{14} \cdot \mathcal{E}
+  \;\approx\; 2^{33.6} \cdot \mathcal{E}.
+\end{equation}
+
+\paragraph{Total complexity and advantage.}
+
+\begin{equation}
+  \label{eq:time14-total}
+  \mathcal{T}_{14}
+  \;\approx\;
+  \max\!\bigl(2^{\rho+19.2},\,2^{33.6}\bigr) \cdot \mathcal{E}.
+\end{equation}
+The verifier dominates whenever $\rho \le 14.4$.  For any
+$\rho \le 14$ (i.e.\ any viable truncated differential with
+$p_t^{(9)} > p_\mathrm{rand}$) the advantage is
+\begin{equation}
+  \label{eq:adv14}
+  \mathrm{Adv}_{14}
+  \;\approx\; 64 - 33.6 \;=\; 30.4 \text{ bits.}
+\end{equation}
+
+\paragraph{Open problem: 9-round truncated differential search.}
+
+The only missing ingredient is a truncated class $\mathcal{T}$ with
+$p_t^{(9)} > p_\mathrm{rand}$ for \speck{}.  Existing MILP-
+and SAT-based trail search methods~\cite{ALLW14} apply directly and
+can enumerate truncated trails at depth~9; we leave this search to
+future work.  All other components of the framework---the BCT
+profile, the UCB beam search, and the verifier---extend to 14 rounds
+without modification.
 
 \section{Experiments}
 \label{sec:experiments}
